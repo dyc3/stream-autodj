@@ -1,0 +1,11 @@
+[package]
+name = "stream-music-looper"
+version = "0.1.0"
+authors = ["Carson McManus <carson.mcmanus1@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rodio = "0.11.0"
+rand = "0.7.3"
