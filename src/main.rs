@@ -5,6 +5,7 @@ use std::io::BufReader;
 use std::collections::HashSet;
 use std::collections::HashMap;
 use std::fs;
+use std::env;
 use rodio::Sink;
 use rodio::Source;
 use rand::Rng;
@@ -32,10 +33,12 @@ impl Display for Song {
 }
 
 fn main() {
+	let args: Vec<String> = env::args().collect();
+
 	let paths = fs::read_dir("./songs").unwrap();
 	let mut unique_songs = HashSet::new();
 	for path in paths.map(|p| p.unwrap().path().display().to_string()) {
-		let file_name = path.split('/').rev().nth(0).unwrap().clone().to_string();
+		let file_name = path.split('/').rev().next().unwrap().to_string();
 		let song_num = file_name.split('_').nth(1).unwrap();
 		unique_songs.insert(song_num.to_owned());
 	}
@@ -64,9 +67,7 @@ fn main() {
 					continue;
 				}
 				if fs::metadata(format!("songs/song_{}_loop{}-to-{}.ogg", song, from, to)).is_ok() {
-					if !valid_transitions.contains_key(&from) {
-						valid_transitions.insert(from, Vec::new());
-					}
+					valid_transitions.entry(from).or_insert_with(Vec::new);
 					valid_transitions.get_mut(&from).unwrap().push(to);
 				}
 			}
@@ -89,9 +90,23 @@ fn main() {
 	let device = rodio::default_output_device().unwrap();
 	let sink = Sink::new(&device);
 
+	let mut song_override = std::option::Option::None;
+	if args.len() > 1 {
+		println!("overriding song");
+		song_override = match args[1].parse::<usize>() {
+			Ok(a) => Some(a),
+			_ => unreachable!(),
+		};
+	}
+
 	loop {
-		let song_num = rng.gen_range(0, songs.len());
+		let song_num = match song_override {
+			Some(a) => a,
+			None => rng.gen_range(0, songs.len()),
+		};
 		let current_song = &songs[song_num];
+
+		println!("DEBUG: song index {}", song_num);
 
 		let file_start = File::open(format!("songs/song_{}_start.ogg", current_song.id.as_str())).unwrap();
 		let source_start = rodio::Decoder::new(BufReader::new(file_start)).unwrap();
