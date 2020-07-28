@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::collections::HashMap;
 use std::fs;
 use rodio::Sink;
+use rodio::Source;
 use rand::Rng;
 use rand::seq::SliceRandom;
 
@@ -98,10 +99,11 @@ fn main() {
 		sink.append(source_start);
 		if current_song.multi_loop_count == 1 {
 			let repeat_count = rng.gen_range(3, 15);
+			let file_loop = File::open(format!("songs/song_{}_loop.ogg", current_song.id.as_str())).unwrap();
+			let buffer = BufReader::new(file_loop);
+			let source_loop = rodio::Decoder::new(buffer).unwrap().buffered();
 			for _ in 0..repeat_count {
-				let file_loop = File::open(format!("songs/song_{}_loop.ogg", current_song.id.as_str())).unwrap();
-				let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap();
-				sink.append(source_loop);
+				sink.append(source_loop.clone());
 			}
 			println!("playing: song {}, repeated {} times", current_song, repeat_count);
 		}
@@ -112,10 +114,10 @@ fn main() {
 			}).collect::<Vec<_>>();
 			println!("playing: song {}, {} loop transitions, repeated {:?} times", current_song, loop_transitions, &loop_plays);
 			for (loop_num, repeats) in loop_plays {
+				let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), loop_num)).unwrap();
+				let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap().buffered();
 				for _ in 0..repeats {
-					let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), loop_num)).unwrap();
-					let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap();
-					sink.append(source_loop);
+					sink.append(source_loop.clone());
 				}
 			}
 		}
@@ -132,10 +134,10 @@ fn main() {
 
 			let repeats = rng.gen_range(3, 7);
 			current_loop_num = 0;
+			let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), current_loop_num)).unwrap();
+			let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap().buffered();
 			for _ in 0..repeats {
-				let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), current_loop_num)).unwrap();
-				let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap();
-				sink.append(source_loop);
+				sink.append(source_loop.clone());
 			}
 
 			for loop_num in flow {
@@ -145,10 +147,10 @@ fn main() {
 				current_loop_num = loop_num;
 
 				let repeats = rng.gen_range(3, 7);
+				let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), loop_num)).unwrap();
+				let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap().buffered();
 				for _ in 0..repeats {
-					let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), loop_num)).unwrap();
-					let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap();
-					sink.append(source_loop);
+					sink.append(source_loop.clone());
 				}
 			}
 		}
