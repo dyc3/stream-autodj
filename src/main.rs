@@ -99,10 +99,6 @@ fn main() {
 		});
 	}
 
-	// format!("song_{}_start.ogg", song),
-	// format!("song_{}_loop.ogg", song),
-	// format!("song_{}_end.ogg", song),
-
 	let mut rng = rand::thread_rng();
 
 	let device = rodio::default_output_device().unwrap();
