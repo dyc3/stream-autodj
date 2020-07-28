@@ -10,6 +10,7 @@ use rodio::Sink;
 use rodio::Source;
 use rand::Rng;
 use rand::seq::SliceRandom;
+use std::option::Option;
 
 // Do NOT use mp3.
 
@@ -30,6 +31,23 @@ impl Display for Song {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{} (has_end: {}, loop_count: {}, transitions: {})", self.id, self.has_end, self.multi_loop_count, self.valid_transitions.len())
 	}
+}
+
+fn read_song_segment(song: &Song, segment: &str) -> rodio::decoder::Decoder<std::io::BufReader<std::fs::File>> {
+	let file = File::open(format!("songs/song_{}_{}.ogg", song.id.as_str(), segment)).unwrap();
+	rodio::Decoder::new(BufReader::new(file)).unwrap()
+}
+
+fn read_song_loop(song: &Song, loop_num: Option<Box<i32>>) -> rodio::decoder::Decoder<std::io::BufReader<std::fs::File>> {
+	match loop_num {
+	    Some(n) => read_song_segment(song, format!("loop{}", n).as_str()),
+	    None => read_song_segment(song, "loop")
+	}
+
+}
+
+fn read_song_loop_transition(song: &Song, from:i32, to:i32) -> rodio::decoder::Decoder<std::io::BufReader<std::fs::File>> {
+	read_song_segment(song, format!("loop{}-to-{}", from, to).as_str())
 }
 
 fn main() {
@@ -108,15 +126,12 @@ fn main() {
 
 		println!("DEBUG: song index {}", song_num);
 
-		let file_start = File::open(format!("songs/song_{}_start.ogg", current_song.id.as_str())).unwrap();
-		let source_start = rodio::Decoder::new(BufReader::new(file_start)).unwrap();
-
+		let source_start = read_song_segment(current_song, "start");
 		sink.append(source_start);
+
 		if current_song.multi_loop_count == 1 {
 			let repeat_count = rng.gen_range(3, 15);
-			let file_loop = File::open(format!("songs/song_{}_loop.ogg", current_song.id.as_str())).unwrap();
-			let buffer = BufReader::new(file_loop);
-			let source_loop = rodio::Decoder::new(buffer).unwrap().buffered();
+			let source_loop = read_song_loop(current_song, Option::None).buffered();
 			for _ in 0..repeat_count {
 				sink.append(source_loop.clone());
 			}
@@ -129,8 +144,7 @@ fn main() {
 			}).collect::<Vec<_>>();
 			println!("playing: song {}, {} loop transitions, repeated {:?} times", current_song, loop_transitions, &loop_plays);
 			for (loop_num, repeats) in loop_plays {
-				let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), loop_num)).unwrap();
-				let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap().buffered();
+				let source_loop = read_song_loop(current_song, Some(Box::new(loop_num))).buffered();
 				for _ in 0..repeats {
 					sink.append(source_loop.clone());
 				}
@@ -149,29 +163,25 @@ fn main() {
 
 			let repeats = rng.gen_range(3, 7);
 			current_loop_num = 0;
-			let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), current_loop_num)).unwrap();
-			let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap().buffered();
+			let source_loop = read_song_loop(current_song, Some(Box::new(current_loop_num))).buffered();
 			for _ in 0..repeats {
 				sink.append(source_loop.clone());
 			}
 
 			for loop_num in flow {
-				let file_transition = File::open(format!("songs/song_{}_loop{}-to-{}.ogg", current_song.id.as_str(), current_loop_num, loop_num)).unwrap();
-				let source_transition = rodio::Decoder::new(BufReader::new(file_transition)).unwrap();
+				let source_transition = read_song_loop_transition(current_song, current_loop_num, loop_num);
 				sink.append(source_transition);
 				current_loop_num = loop_num;
 
 				let repeats = rng.gen_range(3, 7);
-				let file_loop = File::open(format!("songs/song_{}_loop{}.ogg", current_song.id.as_str(), loop_num)).unwrap();
-				let source_loop = rodio::Decoder::new(BufReader::new(file_loop)).unwrap().buffered();
+				let source_loop = read_song_loop(current_song, Some(Box::new(current_loop_num))).buffered();
 				for _ in 0..repeats {
 					sink.append(source_loop.clone());
 				}
 			}
 		}
 		if current_song.has_end {
-			let file_end = File::open(format!("songs/song_{}_end.ogg", current_song.id.as_str())).unwrap();
-			let source_end = rodio::Decoder::new(BufReader::new(file_end)).unwrap();
+			let source_end = read_song_segment(current_song, "end");
 			sink.append(source_end);
 		}
 		sink.sleep_until_end();
