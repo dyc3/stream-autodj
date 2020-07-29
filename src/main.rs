@@ -40,8 +40,8 @@ fn read_song_segment(song: &Song, segment: &str) -> rodio::decoder::Decoder<std:
 
 fn read_song_loop(song: &Song, loop_num: Option<Box<i32>>) -> rodio::decoder::Decoder<std::io::BufReader<std::fs::File>> {
 	match loop_num {
-	    Some(n) => read_song_segment(song, format!("loop{}", n).as_str()),
-	    None => read_song_segment(song, "loop")
+		Some(n) => read_song_segment(song, format!("loop{}", n).as_str()),
+		None => read_song_segment(song, "loop")
 	}
 
 }
