@@ -203,7 +203,10 @@ fn main() {
 		}
 		else {
 			let source_end;
-			let loop_num = if current_song.multi_loop_count == 1 { None } else { Some(Box::new(0)) };
+			let loop_num = match current_song.multi_loop_count {
+				1 => None,
+				_ => Some(Box::new(0))
+			};
 			source_end = read_song_loop(current_song, loop_num).buffered();
 			let empty_source: Zero<f32> = Zero::new(source_end.channels(), source_end.sample_rate());
 			match source_end.total_duration() {
