@@ -7,10 +7,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::env;
 use rodio::Sink;
-use rodio::Source;
+use rodio::{source::Zero, Source};
 use rand::Rng;
 use rand::seq::SliceRandom;
-use std::option::Option;
+use std::{time::Duration, option::Option};
 
 // Do NOT use mp3.
 
@@ -200,6 +200,21 @@ fn main() {
 		if current_song.has_end {
 			let source_end = read_song_segment(current_song, "end");
 			sink.append(source_end);
+		}
+		else {
+			let source_end;
+			let loop_num = if current_song.multi_loop_count == 1 { None } else { Some(Box::new(0)) };
+			source_end = read_song_loop(current_song, loop_num).buffered();
+			let empty_source: Zero<f32> = Zero::new(source_end.channels(), source_end.sample_rate());
+			match source_end.total_duration() {
+				Some(duration) => {
+					sink.append(source_end.take_crossfade_with(empty_source, duration));
+				}
+				None => {
+					println!("failed to grab end duration");
+					sink.append(source_end.take_crossfade_with(empty_source, Duration::from_secs(8)));
+				}
+			}
 		}
 		sink.sleep_until_end();
 	}
