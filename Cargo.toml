@@ -1,5 +1,5 @@
 [package]
-name = "stream-music-looper"
+name = "stream_autodj"
 version = "0.1.0"
 authors = ["Carson McManus <carson.mcmanus1@gmail.com>"]
 edition = "2018"
@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 rodio = "0.11.0"
 rand = "0.7.3"
+regex = "1.3.9"
+lazy_static = "1.4.0"
