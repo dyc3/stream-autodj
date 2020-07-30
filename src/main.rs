@@ -152,9 +152,15 @@ fn main() {
 			let mut current_loop_num = 0;
 			let mut flow = vec![];
 			for _ in 0..loop_transitions {
-				let possible_next_loops = &current_song.valid_transitions[&current_loop_num];
-				current_loop_num = *possible_next_loops.choose(&mut rng).unwrap();
-				flow.push(current_loop_num);
+				match &current_song.valid_transitions.get(&current_loop_num) {
+					Some(possible_next_loops) => {
+						current_loop_num = *possible_next_loops.choose(&mut rng).unwrap();
+						flow.push(current_loop_num);
+					}
+					None => {
+						flow.push(0);
+					}
+				}
 			}
 
 			let repeats = rng.gen_range(3, 7);
@@ -165,8 +171,23 @@ fn main() {
 			}
 
 			for loop_num in flow {
-				let source_transition = read_song_loop_transition(current_song, current_loop_num, loop_num);
-				sink.append(source_transition);
+				if fs::metadata(format!("songs/song_{}_loop{}-to-{}.ogg", current_song.id, current_loop_num, loop_num)).is_ok() {
+					let source_transition = read_song_loop_transition(current_song, current_loop_num, loop_num);
+					sink.append(source_transition);
+				}
+				else {
+					println!("CROSSFADING");
+					let source_from = read_song_loop(current_song, Some(Box::new(current_loop_num)));
+					let source_to = read_song_loop(current_song, Some(Box::new(loop_num)));
+					match source_from.total_duration() {
+						Some(duration) => {
+							sink.append(source_from.take_crossfade_with(source_to, duration));
+						}
+						None => {
+							sink.append(source_from.take_crossfade_with(source_to, Duration::from_secs(8)));
+						}
+					}
+				}
 				current_loop_num = loop_num;
 
 				let repeats = rng.gen_range(3, 7);
