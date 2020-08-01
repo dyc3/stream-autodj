@@ -1,4 +1,5 @@
 mod macros;
+mod repeating_source;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -530,12 +531,10 @@ fn main() {
 		// println!("{:#?}", plan);
 
 		for segment in &plan {
-			let source = current_song.read_segment(&segment.id).buffered();
+			let source = current_song.read_segment(&segment.id);
 			if REGEX_IS_LOOP.is_match(&segment.id) && !REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 				let repeat_counts = rng.gen_range(3, 12);
-				for _ in 0..repeat_counts {
-					sink.append(source.clone());
-				}
+				sink.append(repeating_source::repeat_with_count(source, repeat_counts));
 			}
 			else {
 				sink.append(source);
