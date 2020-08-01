@@ -41,17 +41,6 @@ impl Song {
 		Decoder::new(BufReader::new(file)).unwrap()
 	}
 
-	// fn read_loop(&self, loop_num: Option<Box<i32>>) -> Decoder<BufReader<File>> {
-	// 	match loop_num {
-	// 		Some(n) => self.read_segment(format!("loop{}", n).as_str()),
-	// 		None => self.read_segment("loop")
-	// 	}
-	// }
-
-	// fn read_loop_transition(&self, from:i32, to:i32) -> Decoder<BufReader<File>> {
-	// 	self.read_segment(format!("loop{}-to-{}", from, to).as_str())
-	// }
-
 	fn make_plan(&self, rng: &mut rand::rngs::ThreadRng) -> Vec<SongSegment> {
 		let mut plan = Vec::<SongSegment>::new();
 		plan.push(self.segments["start"].clone());
@@ -445,104 +434,5 @@ fn main() {
 		}
 
 		sink.sleep_until_end();
-
-		// let source_start = current_song.read_segment("start");
-		// sink.append(source_start);
-
-		// if current_song.multi_loop_count == 1 {
-		// 	let repeat_count = rng.gen_range(3, 15);
-		// 	let source_loop = read_song_loop(current_song, Option::None).buffered();
-		// 	for _ in 0..repeat_count {
-		// 		sink.append(source_loop.clone());
-		// 	}
-		// 	println!("playing: song {}, repeated {} times", current_song, repeat_count);
-		// }
-		// else if current_song.valid_transitions.is_empty() {
-		// 	let loop_transitions = rng.gen_range(1, 4);
-		// 	let loop_plays = (0..loop_transitions).map(|_| {
-		// 		(rng.gen_range(0, current_song.multi_loop_count), rng.gen_range(3, 15))
-		// 	}).collect::<Vec<_>>();
-		// 	println!("playing: song {}, {} loop transitions, repeated {:?} times", current_song, loop_transitions, &loop_plays);
-		// 	for (loop_num, repeats) in loop_plays {
-		// 		let source_loop = read_song_loop(current_song, Some(Box::new(loop_num))).buffered();
-		// 		for _ in 0..repeats {
-		// 			sink.append(source_loop.clone());
-		// 		}
-		// 	}
-		// }
-		// else {
-		// 	let loop_transitions = rng.gen_range(1, 4);
-		// 	println!("playing: song {}, {} loop transitions with special loop transitions", current_song, loop_transitions);
-		// 	let mut current_loop_num = 0;
-		// 	let mut flow = vec![];
-		// 	for _ in 0..loop_transitions {
-		// 		match &current_song.valid_transitions.get(&current_loop_num) {
-		// 			Some(possible_next_loops) => {
-		// 				current_loop_num = *possible_next_loops.choose(&mut rng).unwrap();
-		// 				flow.push(current_loop_num);
-		// 			}
-		// 			None => {
-		// 				flow.push(0);
-		// 			}
-		// 		}
-		// 	}
-
-		// 	let repeats = rng.gen_range(3, 7);
-		// 	current_loop_num = 0;
-		// 	let source_loop = read_song_loop(current_song, Some(Box::new(current_loop_num))).buffered();
-		// 	for _ in 0..repeats {
-		// 		sink.append(source_loop.clone());
-		// 	}
-
-		// 	for loop_num in flow {
-		// 		if fs::metadata(format!("songs/song_{}_loop{}-to-{}.ogg", current_song.id, current_loop_num, loop_num)).is_ok() {
-		// 			let source_transition = read_song_loop_transition(current_song, current_loop_num, loop_num);
-		// 			sink.append(source_transition);
-		// 		}
-		// 		else {
-		// 			println!("CROSSFADING");
-		// 			let source_from = read_song_loop(current_song, Some(Box::new(current_loop_num)));
-		// 			let source_to = read_song_loop(current_song, Some(Box::new(loop_num)));
-		// 			match source_from.total_duration() {
-		// 				Some(duration) => {
-		// 					sink.append(source_from.take_crossfade_with(source_to, duration));
-		// 				}
-		// 				None => {
-		// 					sink.append(source_from.take_crossfade_with(source_to, Duration::from_secs(8)));
-		// 				}
-		// 			}
-		// 		}
-		// 		current_loop_num = loop_num;
-
-		// 		let repeats = rng.gen_range(3, 7);
-		// 		let source_loop = read_song_loop(current_song, Some(Box::new(current_loop_num))).buffered();
-		// 		for _ in 0..repeats {
-		// 			sink.append(source_loop.clone());
-		// 		}
-		// 	}
-		// }
-		// if current_song.has_end {
-		// 	let source_end = read_song_segment(current_song, "end");
-		// 	sink.append(source_end);
-		// }
-		// else {
-		// 	let source_end;
-		// 	let loop_num = match current_song.multi_loop_count {
-		// 		1 => None,
-		// 		_ => Some(Box::new(0))
-		// 	};
-		// 	source_end = read_song_loop(current_song, loop_num).buffered();
-		// 	let empty_source: Zero<f32> = Zero::new(source_end.channels(), source_end.sample_rate());
-		// 	match source_end.total_duration() {
-		// 		Some(duration) => {
-		// 			sink.append(source_end.take_crossfade_with(empty_source, duration));
-		// 		}
-		// 		None => {
-		// 			println!("failed to grab end duration");
-		// 			sink.append(source_end.take_crossfade_with(empty_source, Duration::from_secs(8)));
-		// 		}
-		// 	}
-		// }
-		// sink.sleep_until_end();
 	}
 }
