@@ -1,0 +1,61 @@
+# stream-autodj
+
+![Rust](https://github.com/dyc3/stream-autodj/workflows/Rust/badge.svg)
+
+This is the program I use to play background music on my streams. To reduce repetition, it plays songs in a random order, for random durations using pre-made song segments. Smooth transitions between songs and different loop segments are guarenteed.
+
+https://twitch.tv/rollthedyc3
+
+# Installation
+
+## Required Packages
+
+### Ubuntu
+
+```
+sudo apt-get install libasound2-dev
+```
+
+## Running
+
+```
+cargo run --release
+```
+
+# Usage
+
+For each song you want to add, place `ogg` files (the song segments) in the `songs` folder in the following format:
+`mp3` files technically work, but you will get weird pauses when transitioning between different segments.
+
+```
+song_SONGNAME_start.ogg
+song_SONGNAME_loop.ogg
+```
+
+All songs require a `start` segment, and at least 1 `loop` segment. If the song only has one loop, the loop segment must be called `loop`. Segments must have a matching `SONGNAME` in order to be associated with each other.
+
+You can add multiple loops that will be switched between at random intervals:
+
+```
+song_SONGNAME_loop0.ogg
+song_SONGNAME_loop1.ogg
+song_SONGNAME_loop2.ogg
+...
+```
+
+You can add dedicated transitions between loops like this:
+
+```
+song_SONGNAME_loop0-to-1.ogg
+song_SONGNAME_loop1-to-0.ogg
+song_SONGNAME_loop2-to-0.ogg
+...
+```
+Using dedicated loops at all requires the program to plan the song's playback using **only** dedicated transitions.
+This means if a loop segment does not have any dedicated transitions that lead to that segment, it will be unreachable and not be played.
+
+You can add a dedicated end to the song as well:
+```
+song_SONGNAME_end.ogg
+```
+If no dedicated end segment is supplied, the loop will fade out before switching to the next song.
