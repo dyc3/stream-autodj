@@ -13,7 +13,7 @@ use regex::Regex;
 use lazy_static::lazy_static;
 
 lazy_static! {
-	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?").unwrap();
+	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?\.").unwrap();
 	static ref REGEX_IS_DEDICATED_TRANSITION: Regex = Regex::new(r"loop(\d+)-to-(\d+)").unwrap();
 }
 
@@ -398,13 +398,12 @@ fn main() {
 	loop {
 		let current_song_id = *songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap();
 		let current_song = &songs[current_song_id];
+		println!("DEBUG: song id {}", current_song_id);
 
 		let plan = current_song.make_plan(&mut rng);
 		// println!("{:#?}", plan);
 
-		println!("DEBUG: song id {}", current_song_id);
-
-		for segment in plan {
+		for segment in plan.clone() {
 			let source = current_song.read_segment(&segment.id).buffered();
 			if REGEX_IS_LOOP.is_match(&segment.id) {
 				let repeat_counts = rng.gen_range(3, 12);
@@ -415,6 +414,12 @@ fn main() {
 			else {
 				sink.append(source);
 			}
+		}
+		if !current_song.has_end {
+			let id = &plan.last().unwrap().id;
+			let source_end = current_song.read_segment(&id);
+			let empty_source: Zero<f32> = Zero::new(source_end.channels(), source_end.sample_rate());
+			sink.append(source_end.take_crossfade_with(empty_source, Duration::from_secs(8)));
 		}
 
 		sink.sleep_until_end();
