@@ -531,7 +531,7 @@ fn main() {
 		// println!("{:#?}", plan);
 
 		for segment in &plan {
-			let source = current_song.read_segment(&segment.id).buffered();
+			let source = current_song.read_segment(&segment.id);
 			if REGEX_IS_LOOP.is_match(&segment.id) && !REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 				let repeat_counts = rng.gen_range(3, 12);
 				sink.append(repeating_source::repeat_with_count(source, repeat_counts));
