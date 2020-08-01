@@ -17,7 +17,7 @@ use lazy_static::lazy_static;
 use proptest::prelude::*;
 
 lazy_static! {
-	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?").unwrap();
+	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?$").unwrap();
 	static ref REGEX_IS_DEDICATED_TRANSITION: Regex = Regex::new(r"loop(\d+)-to-(\d+)").unwrap();
 }
 
@@ -58,11 +58,11 @@ impl Song {
 			match allowed_transitions.choose(rng) {
 				Some(next_segment_id) => {
 					plan.push(self.segments[next_segment_id].clone());
-					if self.has_end && next_segment_id.ends_with("end") {
+					if self.has_end && self.segments[next_segment_id].is_end() {
 						return plan;
 					}
 					else if plan.len() > 7 {
-						if self.has_end && !next_segment_id.ends_with("end") {
+						if self.has_end && !self.segments[next_segment_id].is_end() {
 							plan.push(self.segments["end"].clone());
 						}
 						return plan;
@@ -73,6 +73,89 @@ impl Song {
 				}
 			}
 		}
+	}
+}
+
+impl SongSegment {
+	fn is_loop(&self) -> bool {
+		REGEX_IS_LOOP.is_match(&self.id) && !self.is_dedicated_transition()
+	}
+
+	fn is_dedicated_transition(&self) -> bool {
+		REGEX_IS_DEDICATED_TRANSITION.is_match(&self.id)
+	}
+
+	fn is_end(&self) -> bool {
+		(&self.id).ends_with("end")
+	}
+}
+
+#[cfg(test)]
+mod test_song_segments {
+	use super::*;
+
+	#[test]
+	fn test_is_loop() {
+		assert!(SongSegment {
+			id: "loop".to_string(),
+			allowed_transitions: set!()
+		}.is_loop());
+
+		assert!(SongSegment {
+			id: "loop0".to_string(),
+			allowed_transitions: set!()
+		}.is_loop());
+
+		assert!(SongSegment {
+			id: "loop1".to_string(),
+			allowed_transitions: set!()
+		}.is_loop());
+
+		assert!(!SongSegment {
+			id: "loop0-to-1".to_string(),
+			allowed_transitions: set!()
+		}.is_loop());
+
+		assert!(!SongSegment {
+			id: "start".to_string(),
+			allowed_transitions: set!()
+		}.is_loop());
+
+		assert!(!SongSegment {
+			id: "end".to_string(),
+			allowed_transitions: set!()
+		}.is_loop());
+	}
+
+	#[test]
+	fn test_is_dedicated_transition() {
+		assert!(!SongSegment {
+			id: "loop".to_string(),
+			allowed_transitions: set!()
+		}.is_dedicated_transition());
+
+		assert!(!SongSegment {
+			id: "loop0".to_string(),
+			allowed_transitions: set!()
+		}.is_dedicated_transition());
+
+		assert!(SongSegment {
+			id: "loop0-to-1".to_string(),
+			allowed_transitions: set!()
+		}.is_dedicated_transition());
+	}
+
+	#[test]
+	fn test_is_end() {
+		assert!(SongSegment {
+			id: "end".to_string(),
+			allowed_transitions: set!()
+		}.is_end());
+
+		assert!(SongSegment {
+			id: "loop0-end".to_string(),
+			allowed_transitions: set!()
+		}.is_end());
 	}
 }
 
@@ -114,27 +197,26 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 		let clone_segments = &song.segments.clone();
 
 		for song_segment in song.segments.values_mut() {
-			if REGEX_IS_DEDICATED_TRANSITION.is_match(&song_segment.id) {
+			if song_segment.is_dedicated_transition() {
 				let loop_nums = REGEX_IS_DEDICATED_TRANSITION.captures(&song_segment.id).unwrap();
 				let loop_to = loop_nums.get(2).unwrap();
 				song_segment.allowed_transitions.insert(format!("loop{}", loop_to.as_str()));
-
-				// can't do this because double borrow
-				// let from_seg = song.segments.get_mut(&format!("loop{}", loop_from.as_str())).unwrap();
-				// from_seg.allowed_transitions.insert(song_segment.id);
 			}
-			else if song.has_multiple_loops && REGEX_IS_LOOP.is_match(&song_segment.id) {
+			else if song.has_multiple_loops && song_segment.is_loop() {
 				if song.has_end {
 					song_segment.allowed_transitions.insert("end".to_string());
 				}
 
 				for seg in clone_segments.values() {
-					if song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(&seg.id) {
+					if song.has_dedicated_transitions && song_segment.is_loop() && seg.is_dedicated_transition() {
 						if seg.id.starts_with(&format!("{}-to", &song_segment.id)) {
 							song_segment.allowed_transitions.insert(seg.id.clone());
 						}
 					}
-					else if !song.has_dedicated_transitions && song.has_multiple_loops && REGEX_IS_LOOP.is_match(&seg.id) {
+					else if seg.id == format!("{}-end", &song_segment.id) {
+						song_segment.allowed_transitions.insert(seg.id.clone());
+					}
+					else if !song.has_dedicated_transitions && song.has_multiple_loops && song_segment.is_loop() && seg.is_loop() {
 						if seg.id == song_segment.id {
 							continue;
 						}
@@ -169,7 +251,7 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 prop_compose! {
 	/// Generates a random valid song segment. May not be valid when put into an actual Song.
 	fn song_segment_strategy()
-		(id in r"(start|end|loop(\d(-to-\d))?)") -> SongSegment {
+		(id in r"(start|end|loop(\d(-(to-\d|end)))?)") -> SongSegment {
 		SongSegment {
 			id,
 			allowed_transitions: set!()
@@ -423,7 +505,8 @@ mod test_song_parsing {
 				paths.push(format!("songs/song_{}_loop{}.ogg", song_id, i))
 			}
 
-			let songs: HashMap<String, Song> = initialize_songs(&paths);
+			let mut songs: HashMap<String, Song> = initialize_songs(&paths);
+			initialize_transitions(&mut songs);
 			for song in songs.values() {
 				for segment in song.segments.values() {
 					prop_assert_ne!(&segment.id, "loop");
@@ -447,6 +530,20 @@ mod test_song_parsing {
 				prop_assert!(!songs[&song_id].segments["loop"].allowed_transitions.is_empty());
 			}
 			prop_assert!(songs[&song_id].segments["end"].allowed_transitions.is_empty());
+		}
+
+		#[test]
+		fn prop_should_not_allow_transitions_to_start_segment(song in song_strategy(12, false)) {
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id => song);
+			initialize_transitions(&mut songs);
+			for song in songs.values() {
+				for segment in song.segments.values() {
+					for transition in &segment.allowed_transitions {
+						prop_assert_ne!(transition, &"start".to_string());
+					}
+				}
+			}
 		}
 	}
 }
@@ -532,7 +629,7 @@ fn main() {
 
 		for segment in &plan {
 			let source = current_song.read_segment(&segment.id);
-			if REGEX_IS_LOOP.is_match(&segment.id) && !REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
+			if segment.is_loop() && !segment.is_dedicated_transition() {
 				let repeat_counts = rng.gen_range(3, 12);
 				sink.append(repeating_source::repeat_with_count(source, repeat_counts));
 			}
