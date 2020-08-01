@@ -90,7 +90,10 @@ where
 
 	#[inline]
 	fn total_duration(&self) -> Option<Duration> {
-		self.inner.total_duration()
+		match self.inner.total_duration() {
+			Some(dur) => {Some(dur.mul_f32(self.count as f32))}
+			None => {None}
+		}
 	}
 }
 
