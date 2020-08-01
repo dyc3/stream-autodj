@@ -602,6 +602,16 @@ mod test_song_planning {
 			let plan = songs[&song_id].make_plan(&mut rng);
 			prop_assert!(plan.len() >= 2);
 		}
+
+		#[test]
+		fn prop_plan_should_never_end_with_transition(song in song_strategy(12, false)) {
+			let mut rng = rand::thread_rng();
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
+			initialize_transitions(&mut songs);
+			let plan = songs[&song_id].make_plan(&mut rng);
+			prop_assert!(!plan.last().unwrap().is_dedicated_transition())
+		}
 	}
 }
 
