@@ -505,7 +505,7 @@ fn main() {
 	loop {
 		let current_song_id = *songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap();
 		let current_song = &songs[current_song_id];
-		println!("DEBUG: song id {}", current_song_id);
+		println!("Now playing: {}", current_song_id);
 
 		let plan = current_song.make_plan(&mut rng);
 		// println!("{:#?}", plan);
