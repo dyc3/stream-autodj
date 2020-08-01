@@ -1,8 +1,10 @@
+mod macros;
+
 use std::fs::File;
 use std::io::BufReader;
 use std::collections::{HashSet, HashMap};
 use std::fs;
-use std::env;
+use std::path::Path;
 use rodio::Sink;
 use rodio::decoder::Decoder;
 use rodio::{source::Zero, Source};
@@ -19,30 +21,6 @@ lazy_static! {
 }
 
 // Do NOT use mp3.
-
-macro_rules! map(
-	{ $($key:expr => $value:expr),+ } => {
-		{
-			let mut m = ::std::collections::HashMap::new();
-			$(
-				m.insert($key, $value);
-			)+
-			m
-		}
-	 };
-);
-
-macro_rules! set {
-	( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
-		{
-			let mut temp_set = HashSet::new();  // Create a mutable HashSet
-			$(
-				temp_set.insert($x); // Insert each item matched into the HashSet
-			)*
-			temp_set // Return the populated HashSet
-		}
-	};
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SongSegment {
@@ -61,7 +39,7 @@ pub struct Song {
 
 impl Song {
 	fn read_segment(&self, segment: &str) -> Decoder<BufReader<File>> {
-		let file = File::open(format!("songs/song_{}_{}.ogg", self.id.as_str(), segment)).unwrap();
+		let file = File::open(format!("songs/song_{}_{}.ogg", self.id, segment)).unwrap();
 		Decoder::new(BufReader::new(file)).unwrap()
 	}
 
@@ -97,13 +75,14 @@ impl Song {
 	}
 }
 
-pub fn initialize_songs(paths: &[String]) -> HashMap<String, Song> {
+pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 	let mut songs = HashMap::new();
 	for path in paths {
-		let file_name = path.split('/').rev().next().unwrap().to_string();
-		let name_split = file_name.split('_').collect::<Vec<&str>>();
+		let path = path.as_ref();
+		let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
+		let name_split = file_name.split('_').collect::<Vec<_>>();
 		let song_id = name_split[1].to_string();
-		let song_segment_id = name_split[2].to_string().split('.').collect::<Vec<&str>>()[0].to_string();
+		let song_segment_id = name_split[2].to_string().split('.').collect::<Vec<_>>()[0].to_string();
 		let song = songs.entry(song_id.clone()).or_insert(Song {
 			id: song_id,
 			segments: HashMap::<String, SongSegment>::new(),
@@ -114,10 +93,10 @@ pub fn initialize_songs(paths: &[String]) -> HashMap<String, Song> {
 		if !song.has_end && song_segment_id == "end"{
 			song.has_end = true;
 		}
-		if !song.has_multiple_loops && song_segment_id != "loop" && REGEX_IS_LOOP.is_match(song_segment_id.as_str()) {
+		if !song.has_multiple_loops && song_segment_id != "loop" && REGEX_IS_LOOP.is_match(&song_segment_id) {
 			song.has_multiple_loops = true;
 		}
-		if !song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(song_segment_id.as_str()) {
+		if !song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(&song_segment_id) {
 			song.has_dedicated_transitions = true;
 		}
 		song.segments.entry(song_segment_id.clone()).or_insert(SongSegment {
@@ -136,7 +115,7 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 		for song_segment in song.segments.values_mut() {
 			if REGEX_IS_DEDICATED_TRANSITION.is_match(&song_segment.id) {
 				let loop_nums = REGEX_IS_DEDICATED_TRANSITION.captures(&song_segment.id).unwrap();
-				let (_, loop_to) = (loop_nums.get(1).unwrap(), loop_nums.get(2).unwrap());
+				let loop_to = loop_nums.get(2).unwrap();
 				song_segment.allowed_transitions.insert(format!("loop{}", loop_to.as_str()));
 
 				// can't do this because double borrow
@@ -173,12 +152,12 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 								"loop".to_string()
 							}
 						);
-					}
+					},
 					"loop" => {
 						if song.has_end {
 							song_segment.allowed_transitions.insert("end".to_string());
 						}
-					}
+					},
 					_ => {}
 				}
 			}
@@ -213,7 +192,7 @@ prop_compose! {
 					id: "loop".to_string(),
 					allowed_transitions: set!()
 				});
-			}
+			},
 			_ => {
 				for i in 0..loop_count {
 					segment_vec.push(SongSegment {
@@ -252,18 +231,18 @@ mod test_song_parsing {
 	#[test]
 	fn test_initialize_songs() {
 		let paths = [
-			"songs/song_1_start.ogg".to_string(),
-			"songs/song_1_loop.ogg".to_string(),
-			"songs/song_1_end.ogg".to_string(),
-			"songs/song_2_start.ogg".to_string(),
-			"songs/song_2_loop0.ogg".to_string(),
-			"songs/song_2_loop1.ogg".to_string(),
-			"songs/song_2_end.ogg".to_string(),
-			"songs/song_3_start.ogg".to_string(),
-			"songs/song_3_loop0.ogg".to_string(),
-			"songs/song_3_loop0-to-1.ogg".to_string(),
-			"songs/song_3_loop1.ogg".to_string(),
-			"songs/song_3_end.ogg".to_string()
+			"songs/song_1_start.ogg",
+			"songs/song_1_loop.ogg",
+			"songs/song_1_end.ogg",
+			"songs/song_2_start.ogg",
+			"songs/song_2_loop0.ogg",
+			"songs/song_2_loop1.ogg",
+			"songs/song_2_end.ogg",
+			"songs/song_3_start.ogg",
+			"songs/song_3_loop0.ogg",
+			"songs/song_3_loop0-to-1.ogg",
+			"songs/song_3_loop1.ogg",
+			"songs/song_3_end.ogg"
 		];
 		let songs = initialize_songs(&paths);
 		assert_eq!(songs["1"], Song {
@@ -342,7 +321,7 @@ mod test_song_parsing {
 
 	#[test]
 	fn test_initialize_transitions() {
-		let mut songs = map!{
+		let mut songs = map! {
 			"1".to_string() => Song {
 				id: "1".to_string(),
 				segments: map!(
@@ -435,7 +414,7 @@ mod test_song_parsing {
 		assert_eq!(songs["3"].segments["end"].allowed_transitions, HashSet::new());
 	}
 
-	proptest!{
+	proptest! {
 		#[test]
 		fn prop_multiloop_song_should_not_contain_references_to_loop(song_id in "[a-z0-9]*", loop_count in 2..10) {
 			let mut paths: Vec<String> = vec![format!("songs/song_{}_start.ogg", song_id)];
@@ -475,7 +454,7 @@ mod test_song_parsing {
 mod test_song_planning {
 	use super::*;
 
-	proptest!{
+	proptest! {
 		#[test]
 		fn prop_plan_should_end_with_end(song in song_strategy(12, true)) {
 			let mut rng = rand::thread_rng();
@@ -489,7 +468,7 @@ mod test_song_planning {
 }
 
 fn main() {
-	let args: Vec<String> = env::args().collect();
+	// let args: Vec<String> = env::args().collect();
 
 	let paths = fs::read_dir("./songs").unwrap();
 	let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
@@ -510,7 +489,7 @@ fn main() {
 		let plan = current_song.make_plan(&mut rng);
 		// println!("{:#?}", plan);
 
-		for segment in plan.clone() {
+		for segment in &plan {
 			let source = current_song.read_segment(&segment.id).buffered();
 			if REGEX_IS_LOOP.is_match(&segment.id) && !REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 				let repeat_counts = rng.gen_range(3, 12);
