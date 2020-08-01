@@ -6,7 +6,7 @@ use rodio::Source;
 
 
 /// Internal function that builds a `RepeatCount` object.
-pub fn repeat_with_count<I>(input: I,count:i32) -> RepeatCount<I>
+pub fn repeat_with_count<I>(input: I,count: i32) -> RepeatCount<I>
 where
 	I: Source,
 	I::Item: Sample,
@@ -16,7 +16,7 @@ where
 		inner: input.clone(),
 		next: input,
 		count: count,
-		count_remaining:count
+		count_remaining: count
 	}
 }
 
@@ -40,7 +40,7 @@ where
 	type Item = <I as Iterator>::Item;
 
 	#[inline]
-	fn next(&mut self) -> Option<<I as Iterator>::Item> {
+	fn next(&mut self) -> Option<Self::Item> {
 		if let Some(value) = self.inner.next() {
 			return Some(value);
 		}
