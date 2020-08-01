@@ -613,7 +613,7 @@ fn main() {
 
 	let mut songs = initialize_songs(&path_strings);
 	initialize_transitions(&mut songs);
-	// println!("{:#?}", songs);
+	println!("Found {} songs", songs.len());
 
 	let mut rng = rand::thread_rng();
 	let device = rodio::default_output_device().unwrap();
@@ -625,7 +625,7 @@ fn main() {
 		println!("Now playing: {}", current_song_id);
 
 		let plan = current_song.make_plan(&mut rng);
-		// println!("{:#?}", plan);
+		println!("plan: {:?}", plan.clone().iter().map(|x| x.id.clone()).collect::<Vec<_>>());
 
 		for segment in &plan {
 			let source = current_song.read_segment(&segment.id);
