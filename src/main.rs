@@ -61,7 +61,7 @@ impl Song {
 					if self.has_end && self.segments[next_segment_id].is_end() {
 						return plan;
 					}
-					else if plan.len() > 7 {
+					else if (self.has_end && plan.len() > 7) || (!self.has_end && plan.len() > 4) {
 						if self.has_end && !self.segments[next_segment_id].is_end() {
 							plan.push(self.segments["end"].clone());
 						}
