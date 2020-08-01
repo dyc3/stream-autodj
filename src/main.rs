@@ -11,9 +11,10 @@ use rand::seq::SliceRandom;
 use std::time::Duration;
 use regex::Regex;
 use lazy_static::lazy_static;
+use proptest::prelude::*;
 
 lazy_static! {
-	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?\.").unwrap();
+	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?").unwrap();
 	static ref REGEX_IS_DEDICATED_TRANSITION: Regex = Regex::new(r"loop(\d+)-to-(\d+)").unwrap();
 }
 
@@ -123,7 +124,7 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 				// let from_seg = song.segments.get_mut(&format!("loop{}", loop_from.as_str())).unwrap();
 				// from_seg.allowed_transitions.insert(song_segment.id);
 			}
-			else if REGEX_IS_LOOP.is_match(&song_segment.id) {
+			else if song.has_multiple_loops && REGEX_IS_LOOP.is_match(&song_segment.id) {
 				if song.has_end {
 					song_segment.allowed_transitions.insert("end".to_string());
 				}
@@ -379,6 +380,27 @@ mod test_song_parsing {
 		assert_eq!(songs["3"].segments["loop1"].allowed_transitions, set!["end".to_string()]);
 		assert_eq!(songs["3"].segments["end"].allowed_transitions, HashSet::new());
 	}
+
+	proptest!{
+		#[test]
+		fn prop_multiloop_song_should_not_contain_references_to_loop(song_id in "[a-z0-9]*", loop_count in 2..10) {
+			let mut paths: Vec<String> = vec![format!("songs/song_{}_start.ogg", song_id)];
+			for i in 0..loop_count {
+				paths.push(format!("songs/song_{}_loop{}.ogg", song_id, i))
+			}
+
+			let songs: HashMap<String, Song> = initialize_songs(&paths);
+			for song in songs.values() {
+				println!("{:#?}", song);
+				for segment in song.segments.values() {
+					prop_assert_ne!(&segment.id, "loop");
+					for transition in &segment.allowed_transitions {
+						prop_assert_ne!(transition, &"loop".to_string());
+					}
+				}
+			}
+		}
+	}
 }
 
 fn main() {
@@ -405,7 +427,7 @@ fn main() {
 
 		for segment in plan.clone() {
 			let source = current_song.read_segment(&segment.id).buffered();
-			if REGEX_IS_LOOP.is_match(&segment.id) {
+			if REGEX_IS_LOOP.is_match(&segment.id) && !REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 				let repeat_counts = rng.gen_range(3, 12);
 				for _ in 0..repeat_counts {
 					sink.append(source.clone());
