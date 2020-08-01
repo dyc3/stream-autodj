@@ -22,7 +22,7 @@
 				"rust"
 			],
 			"sourceMap": {
-				"/rustc/5c1f21c3b82297671ad3ae1e8c942d2ca92e84f2": "/home/USERNAME_HERE/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust"
+				"/rustc/5c1f21c3b82297671ad3ae1e8c942d2ca92e84f2": "${env:HOME}/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust"
 			}
 		},
 		{
@@ -47,7 +47,7 @@
 				"rust"
 			],
 			"sourceMap": {
-				"/rustc/5c1f21c3b82297671ad3ae1e8c942d2ca92e84f2": "/home/USERNAME_HERE/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust"
+				"/rustc/5c1f21c3b82297671ad3ae1e8c942d2ca92e84f2": "${env:HOME}/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust"
 			}
 		}
 	]
