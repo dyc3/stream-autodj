@@ -3,8 +3,8 @@ mod macros;
 use std::fs::File;
 use std::io::BufReader;
 use std::collections::{HashSet, HashMap};
-use std::{env, fs};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::Path;
 use rodio::Sink;
 use rodio::decoder::Decoder;
 use rodio::{source::Zero, Source};
@@ -470,24 +470,7 @@ mod test_song_planning {
 fn main() {
 	// let args: Vec<String> = env::args().collect();
 
-	// Get executable file location or default to `./` if failed.
-	let mut songs_directory = env::current_exe()
-		.unwrap_or(PathBuf::from("./stream_autodj"));
-
-	// env::current_exe() might return path to symbolic link on some platforms.
-	// try to get real path if it's a symbolic link
-	songs_directory = match songs_directory.read_link() {
-		Ok(path) => path,
-		Err(_) => songs_directory,
-	};
-
-	// Remove executable file name from the path.
-	songs_directory.pop();
-
-	// add 'songs' to the end of the path.
-	songs_directory.push("songs");
-
-	let paths = fs::read_dir(songs_directory).unwrap();
+	let paths = fs::read_dir("./songs").unwrap();
 	let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
 
 	let mut songs = initialize_songs(&path_strings);
