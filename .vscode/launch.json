@@ -1,7 +1,4 @@
 {
-	// Use IntelliSense to learn about possible attributes.
-	// Hover to view descriptions of existing attributes.
-	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
 	"version": "0.2.0",
 	"configurations": [
 		{
@@ -20,7 +17,13 @@
 				}
 			},
 			"args": [],
-			"cwd": "${workspaceFolder}"
+			"cwd": "${workspaceFolder}",
+			"sourceLanguages": [
+				"rust"
+			],
+			"sourceMap": {
+				"/rustc/5c1f21c3b82297671ad3ae1e8c942d2ca92e84f2": "/home/USERNAME_HERE/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust"
+			}
 		},
 		{
 			"type": "lldb",
@@ -39,7 +42,13 @@
 				}
 			},
 			"args": [],
-			"cwd": "${workspaceFolder}"
+			"cwd": "${workspaceFolder}",
+			"sourceLanguages": [
+				"rust"
+			],
+			"sourceMap": {
+				"/rustc/5c1f21c3b82297671ad3ae1e8c942d2ca92e84f2": "/home/USERNAME_HERE/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust"
+			}
 		}
 	]
 }
