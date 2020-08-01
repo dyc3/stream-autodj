@@ -485,6 +485,46 @@ mod test_song_planning {
 			let plan = songs[&song_id].make_plan(&mut rng);
 			prop_assert_eq!(&plan.last().unwrap().id, &"end".to_string())
 		}
+
+		#[test]
+		fn prop_plan_should_not_end_with_end(song in song_strategy(12, false)) {
+			let mut rng = rand::thread_rng();
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
+			initialize_transitions(&mut songs);
+			let plan = songs[&song_id].make_plan(&mut rng);
+			prop_assert_ne!(&plan.last().unwrap().id, &"end".to_string())
+		}
+
+		#[test]
+		fn prop_plan_should_always_start_with_start(song in song_strategy(12, true)) {
+			let mut rng = rand::thread_rng();
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
+			initialize_transitions(&mut songs);
+			let plan = songs[&song_id].make_plan(&mut rng);
+			prop_assert_eq!(&plan.first().unwrap().id, &"start".to_string())
+		}
+
+		#[test]
+		fn prop_plan_should_always_be_at_least_3(song in song_strategy(12, true)) {
+			let mut rng = rand::thread_rng();
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
+			initialize_transitions(&mut songs);
+			let plan = songs[&song_id].make_plan(&mut rng);
+			prop_assert!(plan.len() >= 3)
+		}
+
+		#[test]
+		fn prop_plan_should_always_be_at_least_2(song in song_strategy(12, false)) {
+			let mut rng = rand::thread_rng();
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
+			initialize_transitions(&mut songs);
+			let plan = songs[&song_id].make_plan(&mut rng);
+			prop_assert!(plan.len() >= 2);
+		}
 	}
 }
 
