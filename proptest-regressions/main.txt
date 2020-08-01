@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 341a89d84b33f1479f6e7ceb22ea0d1520fb07f11367b37b620bfcd8d84469f6 # shrinks to song = Song { id: "", segments: {"start": SongSegment { id: "start", allowed_transitions: {} }, "loop0": SongSegment { id: "loop0", allowed_transitions: {} }}, has_end: false, has_multiple_loops: false, has_dedicated_transitions: false }
+cc 328c3fab7e54c17e899c1e1fcea4a23cb4d1d267128f54c168dd6dd1d7632453 # shrinks to song = Song { id: "", segments: {"start": SongSegment { id: "start", allowed_transitions: {} }, "loop0": SongSegment { id: "loop0", allowed_transitions: {} }}, has_end: false, has_multiple_loops: false, has_dedicated_transitions: false }
+cc 691882c5c7d5d22a77098f9d2156d79b4baf7d8207f1075cd730d702203fb96f # shrinks to song = Song { id: "", segments: {"end": SongSegment { id: "end", allowed_transitions: {} }, "start": SongSegment { id: "start", allowed_transitions: {} }, "loop0": SongSegment { id: "loop0", allowed_transitions: {} }}, has_end: true, has_multiple_loops: false, has_dedicated_transitions: false }
+cc 92aae9c5f5f031a26dbff530464018d9e547d473d507fa734ef2201231a58d6f # shrinks to song = Song { id: "0", segments: {"start": SongSegment { id: "start", allowed_transitions: {} }, "end": SongSegment { id: "end", allowed_transitions: {} }, "loop0": SongSegment { id: "loop0", allowed_transitions: {} }}, has_end: true, has_multiple_loops: false, has_dedicated_transitions: false }
+cc 70c21cf1d6db3e37a8d008afa434341559dc2c101b78bb8e452043e51f9366df # shrinks to song = Song { id: "3-ymn---8fcg-4v0gg", segments: {"end": SongSegment { id: "end", allowed_transitions: {} }, "start": SongSegment { id: "start", allowed_transitions: {} }, "loop3": SongSegment { id: "loop3", allowed_transitions: {} }, "loop2": SongSegment { id: "loop2", allowed_transitions: {} }, "loop4": SongSegment { id: "loop4", allowed_transitions: {} }, "loop1": SongSegment { id: "loop1", allowed_transitions: {} }, "loop0": SongSegment { id: "loop0", allowed_transitions: {} }}, has_end: true, has_multiple_loops: true, has_dedicated_transitions: false }

@@ -20,6 +20,30 @@ lazy_static! {
 
 // Do NOT use mp3.
 
+macro_rules! map(
+	{ $($key:expr => $value:expr),+ } => {
+		{
+			let mut m = ::std::collections::HashMap::new();
+			$(
+				m.insert($key, $value);
+			)+
+			m
+		}
+	 };
+);
+
+macro_rules! set {
+	( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
+		{
+			let mut temp_set = HashSet::new();  // Create a mutable HashSet
+			$(
+				temp_set.insert($x); // Insert each item matched into the HashSet
+			)*
+			temp_set // Return the populated HashSet
+		}
+	};
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SongSegment {
 	id: String,
@@ -55,7 +79,13 @@ impl Song {
 			match allowed_transitions.choose(rng) {
 				Some(next_segment_id) => {
 					plan.push(self.segments[next_segment_id].clone());
-					if self.has_end && next_segment_id.ends_with("end") || plan.len() > 5 {
+					if self.has_end && next_segment_id.ends_with("end") {
+						return plan;
+					}
+					else if plan.len() > 7 {
+						if self.has_end && !next_segment_id.ends_with("end") {
+							plan.push(self.segments["end"].clone());
+						}
 						return plan;
 					}
 				},
@@ -156,33 +186,68 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 	}
 }
 
+prop_compose! {
+	/// Generates a random valid song segment. May not be valid when put into an actual Song.
+	fn song_segment_strategy()
+		(id in r"(start|end|loop(\d(-to-\d))?)") -> SongSegment {
+		SongSegment {
+			id,
+			allowed_transitions: set!()
+		}
+	}
+}
+
+prop_compose! {
+	/// Generates a valid Song without dedicated transitions
+	fn song_strategy(max_loop_count: u32, has_end: bool)
+		(id in "[a-z0-9-]*", loop_count in 1..=max_loop_count) -> Song {
+		let mut segment_vec: Vec<SongSegment> = vec![];
+		segment_vec.push(SongSegment {
+			id: "start".to_string(),
+			allowed_transitions: set!()
+		});
+
+		match loop_count {
+			1 => {
+				segment_vec.push(SongSegment {
+					id: "loop".to_string(),
+					allowed_transitions: set!()
+				});
+			}
+			_ => {
+				for i in 0..loop_count {
+					segment_vec.push(SongSegment {
+						id: format!("loop{}", i),
+						allowed_transitions: set!()
+					});
+				}
+			}
+		}
+
+		if has_end {
+			segment_vec.push(SongSegment {
+				id: "end".to_string(),
+				allowed_transitions: set!()
+			});
+		}
+
+		let mut segments: HashMap<String, SongSegment> = HashMap::new();
+		for seg in segment_vec {
+			segments.insert(seg.id.to_string(), seg.clone());
+		}
+		Song {
+			id,
+			segments,
+			has_end,
+			has_multiple_loops: loop_count > 1,
+			has_dedicated_transitions: false,
+		}
+	}
+}
+
 #[cfg(test)]
 mod test_song_parsing {
 	use super::*;
-
-	macro_rules! map(
-		{ $($key:expr => $value:expr),+ } => {
-			{
-				let mut m = ::std::collections::HashMap::new();
-				$(
-					m.insert($key, $value);
-				)+
-				m
-			}
-		 };
-	);
-
-	macro_rules! set {
-		( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
-			{
-				let mut temp_set = HashSet::new();  // Create a mutable HashSet
-				$(
-					temp_set.insert($x); // Insert each item matched into the HashSet
-				)*
-				temp_set // Return the populated HashSet
-			}
-		};
-	}
 
 	#[test]
 	fn test_initialize_songs() {
@@ -380,7 +445,6 @@ mod test_song_parsing {
 
 			let songs: HashMap<String, Song> = initialize_songs(&paths);
 			for song in songs.values() {
-				println!("{:#?}", song);
 				for segment in song.segments.values() {
 					prop_assert_ne!(&segment.id, "loop");
 					for transition in &segment.allowed_transitions {
@@ -388,6 +452,38 @@ mod test_song_parsing {
 					}
 				}
 			}
+		}
+
+		#[test]
+		fn prop_should_generate_transitions(song in song_strategy(12, true)) {
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
+			initialize_transitions(&mut songs);
+			prop_assert!(!songs[&song_id].segments["start"].allowed_transitions.is_empty());
+			if songs[&song_id].has_multiple_loops {
+				prop_assert!(!songs[&song_id].segments["loop0"].allowed_transitions.is_empty());
+			}
+			else {
+				prop_assert!(!songs[&song_id].segments["loop"].allowed_transitions.is_empty());
+			}
+			prop_assert!(songs[&song_id].segments["end"].allowed_transitions.is_empty());
+		}
+	}
+}
+
+#[cfg(test)]
+mod test_song_planning {
+	use super::*;
+
+	proptest!{
+		#[test]
+		fn prop_plan_should_end_with_end(song in song_strategy(12, true)) {
+			let mut rng = rand::thread_rng();
+			let song_id = song.id.to_string();
+			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
+			initialize_transitions(&mut songs);
+			let plan = songs[&song_id].make_plan(&mut rng);
+			prop_assert_eq!(&plan.last().unwrap().id, &"end".to_string())
 		}
 	}
 }
