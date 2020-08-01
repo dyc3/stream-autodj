@@ -43,11 +43,13 @@ where
 	fn next(&mut self) -> Option<<I as Iterator>::Item> {
 		if let Some(value) = self.inner.next() {
 			return Some(value);
-		}else if self.count_remaining > 1{
+		}
+		else if self.count_remaining > 1 {
 			self.count_remaining -= 1;
 			self.inner = self.next.clone();
 			self.inner.next()
-		}else{
+		}
+		else {
 			None
 		}
 	}
