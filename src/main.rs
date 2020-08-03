@@ -15,6 +15,8 @@ use std::time::Duration;
 use regex::Regex;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
+extern crate clap;
+use clap::{Arg, App};
 
 lazy_static! {
 	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?$").unwrap();
@@ -616,9 +618,27 @@ mod test_song_planning {
 }
 
 fn main() {
-	// let args: Vec<String> = env::args().collect();
+	let args = App::new("stream-autodj")
+					.version("0.1.0")
+					.author("Carson McManus <@dyc3>")
+					.about("Plays music loops for random durations in random order.")
+					.arg(Arg::with_name("songs-dir")
+						.short("s")
+						.long("songs-dir")
+						.value_name("SONGS_DIR")
+						.help("Sets a custom config file")
+						.default_value("./songs")
+						.takes_value(true))
+					.arg(Arg::with_name("OVERRIDE")
+						.help("Overrides song selection with this song.")
+						.required(false)
+						.index(1))
+					.arg(Arg::with_name("debug-wait-each-segment")
+						.long("debug-wait-each-segment")
+						.help("Force the program to wait for the sink to empty after each source is added to the sink, and print the name of the segments as they get queued up. Will cause small pauses between song segments as a result."))
+					.get_matches();
 
-	let paths = fs::read_dir("./songs").unwrap();
+	let paths = fs::read_dir(args.value_of("songs-dir").unwrap()).expect("Unable to list files in songs-dir.");
 	let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
 
 	let mut songs = initialize_songs(&path_strings);
@@ -630,7 +650,10 @@ fn main() {
 	let sink = Sink::new(&device);
 
 	loop {
-		let current_song_id = *songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap();
+		let current_song_id = match args.value_of("OVERRIDE") {
+			Some(value) => value,
+			None => *songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap()
+		};
 		let current_song = &songs[current_song_id];
 		println!("Now playing: {}", current_song_id);
 
@@ -639,6 +662,9 @@ fn main() {
 
 		for segment in &plan {
 			let source = current_song.read_segment(&segment.id);
+			if args.is_present("debug-wait-each-segment") {
+				println!("playing segment: {}", segment.id);
+			}
 			if segment.is_loop() && !segment.is_dedicated_transition() {
 				let repeat_counts = rng.gen_range(5, 13);
 				println!("Repeating {} {} times", segment.id, repeat_counts);
@@ -646,6 +672,9 @@ fn main() {
 			}
 			else {
 				sink.append(source);
+			}
+			if args.is_present("debug-wait-each-segment") {
+				sink.sleep_until_end();
 			}
 		}
 		if !current_song.has_end {
