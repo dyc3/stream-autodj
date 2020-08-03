@@ -633,6 +633,10 @@ fn main() {
 						.help("Overrides song selection with this song.")
 						.required(false)
 						.index(1))
+					.arg(Arg::with_name("max-repeats")
+						.long("max-repeats")
+						.takes_value(true)
+						.help("Sets the max number of loop repeats"))
 					.arg(Arg::with_name("debug-wait-each-segment")
 						.long("debug-wait-each-segment")
 						.help("Force the program to wait for the sink to empty after each source is added to the sink, and print the name of the segments as they get queued up. Will cause small pauses between song segments as a result."))
@@ -648,6 +652,11 @@ fn main() {
 	let mut rng = rand::thread_rng();
 	let device = rodio::default_output_device().unwrap();
 	let sink = Sink::new(&device);
+
+	let max_repeats = match args.value_of("max-repeats") {
+		Some(value) => value.parse::<i32>().expect("invalid value for max-repeats"),
+		None => 13
+	};
 
 	loop {
 		let current_song_id = match args.value_of("OVERRIDE") {
@@ -666,7 +675,7 @@ fn main() {
 				println!("playing segment: {}", segment.id);
 			}
 			if segment.is_loop() && !segment.is_dedicated_transition() {
-				let repeat_counts = rng.gen_range(5, 13);
+				let repeat_counts = rng.gen_range(5, max_repeats);
 				println!("Repeating {} {} times", segment.id, repeat_counts);
 				sink.append(repeating_source::repeat_with_count(source, repeat_counts));
 			}
