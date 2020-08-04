@@ -63,6 +63,9 @@ impl Song {
 						return plan;
 					}
 					else if (self.has_end && plan.len() > 7) || (!self.has_end && plan.len() > 4) {
+						if self.has_dedicated_transitions && self.segments[next_segment_id].is_dedicated_transition() {
+							continue;
+						}
 						if self.has_end && !self.segments[next_segment_id].is_end() {
 							plan.push(self.segments["end"].clone());
 						}
@@ -261,9 +264,9 @@ prop_compose! {
 }
 
 prop_compose! {
-	/// Generates a valid Song without dedicated transitions
+	/// Generates a valid Song with kinda random dedicated transitions
 	fn song_strategy(max_loop_count: u32, has_end: bool)
-		(id in "[a-z0-9-]*", loop_count in 1..=max_loop_count) -> Song {
+		(id in "[a-z0-9-]*", loop_count in 1..=max_loop_count, loop_transitions in 0..max_loop_count) -> Song {
 		let mut segment_vec: Vec<SongSegment> = vec![];
 		segment_vec.push(SongSegment {
 			id: "start".to_string(),
@@ -287,6 +290,25 @@ prop_compose! {
 			}
 		}
 
+		if loop_transitions > 0 {
+			let mut transition_count = 0;
+			'outer: for from in 0..loop_count {
+				for to in 0..loop_count {
+					if from == to {
+						continue
+					}
+					segment_vec.push(SongSegment {
+						id: format!("loop{}-to-{}", from, to),
+						allowed_transitions: set!()
+					});
+					transition_count += 1;
+					if transition_count >= loop_transitions {
+						break 'outer;
+					}
+				}
+			}
+		}
+
 		if has_end {
 			segment_vec.push(SongSegment {
 				id: "end".to_string(),
@@ -303,7 +325,7 @@ prop_compose! {
 			segments,
 			has_end,
 			has_multiple_loops: loop_count > 1,
-			has_dedicated_transitions: false,
+			has_dedicated_transitions: loop_transitions > 0,
 		}
 	}
 }
