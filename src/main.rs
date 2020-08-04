@@ -14,7 +14,7 @@ use rand::seq::SliceRandom;
 use std::time::Duration;
 use regex::Regex;
 use lazy_static::lazy_static;
-use proptest::prelude::*;
+use proptest::{prelude::*, collection::hash_map};
 use clap::{Arg, App};
 
 lazy_static! {
@@ -330,6 +330,70 @@ prop_compose! {
 	}
 }
 
+prop_compose! {
+	fn song_with_transitions_strategy(loop_count: usize, has_end: bool)
+		(id in "[a-z0-9-]*", transitions in hash_map(0..loop_count, 0..loop_count, 1..loop_count).prop_filter("must not transition into same loop".to_owned(), |m| {
+			for (from, to) in m {
+				if from == to {
+					return false;
+				}
+			}
+			true
+		})) -> Song {
+			let mut segment_vec: Vec<SongSegment> = vec![];
+			segment_vec.push(SongSegment {
+				id: "start".to_string(),
+				allowed_transitions: set!()
+			});
+
+			match loop_count {
+				1 => {
+					segment_vec.push(SongSegment {
+						id: "loop".to_string(),
+						allowed_transitions: set!()
+					});
+				},
+				_ => {
+					for i in 0..loop_count {
+						segment_vec.push(SongSegment {
+							id: format!("loop{}", i),
+							allowed_transitions: set!()
+						});
+					}
+				}
+			}
+
+			for (from, to) in transitions {
+				if from == to {
+					continue;
+				}
+				segment_vec.push(SongSegment {
+					id: format!("loop{}-to-{}", from, to),
+					allowed_transitions: set!()
+				});
+			}
+
+			if has_end {
+				segment_vec.push(SongSegment {
+					id: "end".to_string(),
+					allowed_transitions: set!()
+				});
+			}
+
+			let mut segments: HashMap<String, SongSegment> = HashMap::new();
+			for seg in segment_vec {
+				segments.insert(seg.id.to_string(), seg.clone());
+			}
+			Song {
+				id,
+				segments,
+				has_end,
+				has_multiple_loops: loop_count > 1,
+				has_dedicated_transitions: true,
+			}
+	}
+}
+
 #[cfg(test)]
 mod test_song_parsing {
 	use super::*;
@@ -627,7 +691,7 @@ mod test_song_planning {
 		}
 
 		#[test]
-		fn prop_plan_should_never_end_with_transition(song in song_strategy(12, false)) {
+		fn prop_plan_should_never_end_with_transition(song in song_with_transitions_strategy(12, false)) {
 			let mut rng = rand::thread_rng();
 			let song_id = song.id.to_string();
 			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
