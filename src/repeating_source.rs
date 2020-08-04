@@ -15,8 +15,8 @@ where
 	RepeatCount {
 		inner: input.clone(),
 		next: input,
-		count: count,
-		count_remaining: count - 1 // because assigning inner consumes one of the repeats.
+		count,
+		count_remaining: count - 1 // Because assigning inner consumes one of the repeats.
 	}
 }
 
@@ -42,7 +42,7 @@ where
 	#[inline]
 	fn next(&mut self) -> Option<Self::Item> {
 		if let Some(value) = self.inner.next() {
-			return Some(value);
+			Some(value)
 		}
 		else if self.count_remaining > 1 {
 			self.count_remaining -= 1;
@@ -56,7 +56,7 @@ where
 
 	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
-		// infinite
+		// Infinite.
 		(0, None)
 	}
 }

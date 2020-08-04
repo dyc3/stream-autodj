@@ -15,7 +15,6 @@ use std::time::Duration;
 use regex::Regex;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
-extern crate clap;
 use clap::{Arg, App};
 
 lazy_static! {
@@ -41,8 +40,8 @@ pub struct Song {
 }
 
 impl Song {
-	fn read_segment(&self, segment: &str) -> Decoder<BufReader<File>> {
-		let file = File::open(format!("songs/song_{}_{}.ogg", self.id, segment)).unwrap();
+	fn read_segment(&self, segment: &str, songs_dir: &str) -> Decoder<BufReader<File>> {
+		let file = File::open(format!("{}/song_{}_{}.ogg", songs_dir, self.id, segment)).unwrap();
 		Decoder::new(BufReader::new(file)).unwrap()
 	}
 
@@ -642,7 +641,8 @@ fn main() {
 						.help("Force the program to wait for the sink to empty after each source is added to the sink, and print the name of the segments as they get queued up. Will cause small pauses between song segments as a result."))
 					.get_matches();
 
-	let paths = fs::read_dir(args.value_of("songs-dir").unwrap()).expect("Unable to list files in songs-dir.");
+	let songs_dir = args.value_of("songs-dir").unwrap();
+	let paths = fs::read_dir(songs_dir).expect("Unable to list files in songs-dir.");
 	let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
 
 	let mut songs = initialize_songs(&path_strings);
@@ -670,7 +670,7 @@ fn main() {
 		println!("plan: {:?}", plan.clone().iter().map(|x| x.id.clone()).collect::<Vec<_>>());
 
 		for segment in &plan {
-			let source = current_song.read_segment(&segment.id);
+			let source = current_song.read_segment(&segment.id, songs_dir);
 			if args.is_present("debug-wait-each-segment") {
 				println!("playing segment: {}", segment.id);
 			}
@@ -688,7 +688,7 @@ fn main() {
 		}
 		if !current_song.has_end {
 			let id = &plan.last().unwrap().id;
-			let source_end = current_song.read_segment(&id);
+			let source_end = current_song.read_segment(&id, songs_dir);
 			let empty_source: Zero<f32> = Zero::new(source_end.channels(), source_end.sample_rate());
 			sink.append(source_end.take_crossfade_with(empty_source, Duration::from_secs(8)));
 		}
