@@ -15,7 +15,7 @@ where
 	RepeatCount {
 		inner: input.clone(),
 		next: input,
-		count: count,
+		count,
 		count_remaining: count - 1 // Because assigning inner consumes one of the repeats.
 	}
 }
