@@ -205,7 +205,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 		}
 		if song.segments.contains_key(&song_segment_id) {
 			// Panic here, because having multiple files with the same ID is ambiguous
-			panic!("Found multiple segments with same ID")
+			panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, song_segment_id))
 		}
 		song.segments.entry(song_segment_id.clone()).or_insert(SongSegment {
 			id: song_segment_id,
@@ -560,7 +560,7 @@ mod test_song_parsing {
 	}
 
 	#[test]
-	#[should_panic(expected = "Found multiple segments with same ID")]
+	#[should_panic(expected = "Found multiple segments with same ID: Song: format Segment: loop")]
 	fn test_detect_duplicate_segment(){
 		let paths = [
 			"song_format_start.wav",
