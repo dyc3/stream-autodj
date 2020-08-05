@@ -203,6 +203,10 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 		if !song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(&song_segment_id) {
 			song.has_dedicated_transitions = true;
 		}
+		if song.segments.contains_key(&song_segment_id) {
+			// Panic here, because having multiple files with the same ID is ambiguous
+			panic!("Found multiple segments with same ID")
+		}
 		song.segments.entry(song_segment_id.clone()).or_insert(SongSegment {
 			id: song_segment_id,
 			format:song_segment_format,
@@ -440,7 +444,10 @@ mod test_song_parsing {
 			"songs/song_3_loop0.ogg",
 			"songs/song_3_loop0-to-1.ogg",
 			"songs/song_3_loop1.ogg",
-			"songs/song_3_end.ogg"
+			"songs/song_3_end.ogg",
+			"songs/song_wav_start.wav",
+			"songs/song_wav_loop.wav",
+			"songs/song_wav_end.wav",
 		];
 		let songs = initialize_songs(&paths);
 		assert_eq!(songs["1"], Song {
@@ -527,6 +534,41 @@ mod test_song_parsing {
 			has_multiple_loops: true,
 			has_dedicated_transitions: true
 		});
+		assert_eq!(songs["wav"], Song {
+			id: "wav".to_string(),
+			segments: map!(
+				"start".to_string() => SongSegment {
+					id: "start".to_string(),
+					format:"wav".to_string(),
+					allowed_transitions: HashSet::new(),
+				},
+				"loop".to_string() => SongSegment {
+					id: "loop".to_string(),
+					format:"wav".to_string(),
+					allowed_transitions: HashSet::new(),
+				},
+				"end".to_string() => SongSegment {
+					id: "end".to_string(),
+					format:"wav".to_string(),
+					allowed_transitions: HashSet::new(),
+				}
+			),
+			has_end: true,
+			has_multiple_loops: false,
+			has_dedicated_transitions: false
+		});
+	}
+
+	#[test]
+	#[should_panic(expected = "Found multiple segments with same ID")]
+	fn test_detect_duplicate_segment(){
+		let paths = [
+			"song_format_start.wav",
+			"song_format_end.wav",
+			"song_format_loop.wav",
+			"song_format_loop.ogg"
+		];
+		initialize_songs(&paths);
 	}
 
 	#[test]
