@@ -24,7 +24,9 @@ cargo run --release
 
 # Usage
 
-For each song you want to add, place `ogg` files (the song segments) in the `songs` folder in the following format:
+For each song you want to add, place audio files (the song segments) in the `songs` folder in the following format:
+Allowed formats include:
+`wav`, `ogg`, `mp3`, and `flac`
 `mp3` files technically work, but you will get weird pauses when transitioning between different segments.
 
 ```
