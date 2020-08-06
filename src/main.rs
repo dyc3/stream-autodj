@@ -223,13 +223,13 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 					has_multiple_loops: false,
 					has_dedicated_transitions: false
 				});
-				if !song.has_end && segment.id == "end"{
+				if segment.id == "end"{
 					song.has_end = true;
 				}
-				if !song.has_multiple_loops && segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
+				if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
 					song.has_multiple_loops = true;
 				}
-				if !song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
+				if REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 					song.has_dedicated_transitions = true;
 				}
 				if song.segments.contains_key(&segment.id.to_string()) {
