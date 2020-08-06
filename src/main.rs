@@ -179,13 +179,15 @@ mod test_song_segments {
 
 pub enum FileFormat {
 	SegmentFormat,
-	SongArchiveFormat,
+	SongArchiveFormat(zip::ZipArchive<File>),
 	InvalidFormat
 }
 
 pub fn detect_file_type(path: &Path) -> FileFormat{
 	if let Ok(_) = Decoder::new(File::open(path).unwrap()){
 		FileFormat::SegmentFormat
+	}else if let Ok(archive) = zip::ZipArchive::new(File::open(path).unwrap()){
+		FileFormat::SongArchiveFormat(archive)
 	}else{
 		FileFormat::InvalidFormat
 	}
@@ -231,12 +233,11 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 					allowed_transitions: HashSet::<String>::new(),
 				});
 			}
-		    FileFormat::SongArchiveFormat => {}
+		    FileFormat::SongArchiveFormat(_)=> {
+				println!("Encountered Archive!")
+			}
 		    FileFormat::InvalidFormat => {
-				if let Err(_) = Decoder::new(File::open(path).unwrap()){
-					println!("Encountered error reading file {}, dropping.", path.to_str().unwrap());
-					continue;
-				}
+				println!("Encountered error reading file {}, dropping.", path.to_str().unwrap());
 			}
 		}
 	}
