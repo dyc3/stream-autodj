@@ -193,47 +193,52 @@ pub fn detect_file_type(path: &Path) -> FileFormat{
 	}
 }
 
+pub fn parse_segment(file_name: &str) -> Option<(String, SongSegment)> {
+	let mut name_split = file_name.split('_');
+	if name_split.next().unwrap() != "song"{}
+	let song_id = name_split.next()?.to_string();
+	let mut song_segment_split = name_split.next()?.split(".");
+	let song_segment_id = song_segment_split.next().expect("File missing ID");
+	let song_segment_format = song_segment_split.next().expect("Could not find file format");
+	let segment = SongSegment {
+		id: song_segment_id.to_string(),
+		format:song_segment_format.to_string(),
+		allowed_transitions: HashSet::<String>::new(),
+	};
+	Some((song_id,segment))
+}
+
 pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 	// TODO: add file detection for mp3, flac, wav, and ogg
 	let mut songs = HashMap::new();
 	for path in paths {
 		let path = path.as_ref();
-		// This should be fine, as we drop the file immediately, closing it in the process.
 		match detect_file_type(path){
 			FileFormat::SegmentFormat => {
-				let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
-				let name_split = file_name.split('_').collect::<Vec<_>>();
-				let song_id = name_split[1].to_string();
-				let song_segment_split = name_split[2].split(".").collect::<Vec<_>>();
-				let song_segment_id = song_segment_split[0].to_string();
-				let song_segment_format = song_segment_split[1].to_string();
-				let song = songs.entry(song_id.clone()).or_insert(Song {
+				let (song_id, segment) = parse_segment(path.to_str().unwrap()).unwrap();
+				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
 					segments: HashMap::<String, SongSegment>::new(),
 					has_end: false,
 					has_multiple_loops: false,
 					has_dedicated_transitions: false
 				});
-				if !song.has_end && song_segment_id == "end"{
+				if !song.has_end && segment.id == "end"{
 					song.has_end = true;
 				}
-				if !song.has_multiple_loops && song_segment_id != "loop" && REGEX_IS_LOOP.is_match(&song_segment_id) {
+				if !song.has_multiple_loops && segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
 					song.has_multiple_loops = true;
 				}
-				if !song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(&song_segment_id) {
+				if !song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 					song.has_dedicated_transitions = true;
 				}
-				if song.segments.contains_key(&song_segment_id) {
+				if song.segments.contains_key(&segment.id.to_string()) {
 					// Panic here, because having multiple files with the same ID is ambiguous
-					panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, song_segment_id))
+					panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, segment.id))
 				}
-				song.segments.entry(song_segment_id.clone()).or_insert(SongSegment {
-					id: song_segment_id,
-					format:song_segment_format,
-					allowed_transitions: HashSet::<String>::new(),
-				});
+				song.segments.entry(segment.id.to_string()).or_insert(segment);
 			}
-		    FileFormat::SongArchiveFormat(_)=> {
+		    FileFormat::SongArchiveFormat(archive)=> {
 				println!("Encountered Archive!")
 			}
 		    FileFormat::InvalidFormat => {
