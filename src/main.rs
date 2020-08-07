@@ -189,17 +189,16 @@ mod test_song_segments {
 
 pub enum FileFormat {
 	SegmentFormat,
-	SongArchiveFormat(zip::ZipArchive<File>),
+	SongArchiveFormat,
 	InvalidFormat
 }
 
 pub fn detect_file_type(path: &Path) -> FileFormat{
-	if let Ok(_) = Decoder::new(File::open(path).unwrap()){
-		FileFormat::SegmentFormat
-	}else if let Ok(archive) = zip::ZipArchive::new(File::open(path).unwrap()){
-		FileFormat::SongArchiveFormat(archive)
-	}else{
-		FileFormat::InvalidFormat
+	let extension = path.file_name().unwrap().to_str().unwrap().split(".").last().unwrap();
+	match extension{
+		"wav"|"ogg"|"mp3"|"flac" => {FileFormat::SegmentFormat},
+		"zip" => {FileFormat::SongArchiveFormat}
+		_ => {FileFormat::InvalidFormat}
 	}
 }
 
@@ -231,8 +230,8 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 		let path = path.as_ref();
 		match detect_file_type(path){
 			FileFormat::SegmentFormat => {
-				let song_id = get_song_name(path.to_str().unwrap());
-				let segment = parse_segment(path.to_str().unwrap()).unwrap();
+				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
+				let segment = parse_segment(path.file_name().unwrap().to_str().unwrap()).unwrap();
 				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
 					segments: HashMap::<String, SongSegment>::new(),
@@ -256,8 +255,9 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 				}
 				song.segments.entry(segment.id.to_string()).or_insert(segment);
 			}
-		    FileFormat::SongArchiveFormat(archive)=> {
-				let song_id = get_song_name(path.to_str().unwrap());
+		    FileFormat::SongArchiveFormat => {
+				let archive = ZipArchive::new(File::open(path).unwrap()).unwrap();
+				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
 				println!("Encountered Archive {}", song_id);
 				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
@@ -510,6 +510,33 @@ prop_compose! {
 #[cfg(test)]
 mod test_song_parsing {
 	use super::*;
+
+	#[test]
+	fn test_song_archive(){
+		let paths = fs::read_dir("test-data/test_song_archive").expect("Unable to list files in songs-dir.");
+		let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
+		let songs= initialize_songs(&path_strings);
+		assert_eq!(songs["archive"],Song{
+			id: "archive".to_string(),
+			segments:map!(
+				"start".to_string() => SongSegment {
+					id: "start".to_string(),
+					format:"wav".to_string(),
+					allowed_transitions: HashSet::new(),
+					
+				},
+				"loop".to_string() => SongSegment {
+					id: "loop".to_string(),
+					format:"wav".to_string(),
+					allowed_transitions: HashSet::new(),
+					
+				}),
+			has_end: false,
+			has_multiple_loops: false,
+			has_dedicated_transitions: false,
+			is_archive: true,
+		})
+	}
 
 	#[test]
 	fn test_initialize_songs() {
