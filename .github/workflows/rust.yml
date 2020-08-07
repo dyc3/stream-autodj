@@ -20,8 +20,6 @@ jobs:
     - name: Build
       run: cargo build --verbose
     - name: Run tests
-      run:
-        - cargo test --verbose
-        - rustup toolchain install nightly
-        - rustup component add rustfmt
-        - cargo +nightly fmt -- --check
+      run: cargo test --verbose
+    - name: Check formatting
+      run: rustup toolchain install nightly && rustup component add rustfmt && cargo +nightly fmt -- --check
