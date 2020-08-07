@@ -39,6 +39,7 @@ pub struct Song {
 	id: String,
 	segments: HashMap<String, SongSegment>,
 	has_end: bool,
+	has_global_ending: bool,
 	has_multiple_loops: bool,
 	has_dedicated_transitions: bool,
 	is_archive: bool,
@@ -70,29 +71,51 @@ impl Song {
 		let mut plan = Vec::<SongSegment>::new();
 		plan.push(self.segments["start"].clone());
 
+		let available_ends = self.segments.clone().into_iter().map(|(_, seg)| seg.id).filter(|seg| seg.ends_with("end")).collect::<Vec<String>>();
+
 		loop {
 			assert!(plan.len() <= 100, "plan too long");
 
 			let current_segment = plan.last().unwrap();
-			let allowed_transitions = current_segment
-				.allowed_transitions
-				.clone()
-				.into_iter()
-				.collect::<Vec<_>>();
+			// It seems pretty shit to call collect and into_iter so many times. A lot less elegant than I would have hoped.
+			let mut transitions = current_segment.allowed_transitions.clone().into_iter().collect::<Vec<String>>().into_iter();
+			if self.has_end && plan.len() > 7 {
+				let mut filtered = transitions.clone().filter(|next| next.ends_with("end")).collect::<Vec<String>>();
+				if !filtered.is_empty() {
+					transitions = filtered.into_iter();
+				}
+				else {
+					filtered = transitions.clone().filter(|next| {
+						for end in available_ends.clone() {
+							if end.contains(next) {
+								return true;
+							}
+						}
+						false
+					}).collect::<Vec<String>>();
+					if !filtered.is_empty() {
+						transitions = filtered.into_iter();
+					}
+				}
+			}
+			let allowed_transitions = transitions.collect::<Vec<String>>();
 			match allowed_transitions.choose(rng) {
 				Some(next_segment_id) => {
 					plan.push(self.segments[next_segment_id].clone());
-					if self.has_end && self.segments[next_segment_id].is_end() {
+					if self.segments[next_segment_id].is_end() {
 						return plan;
 					}
 					else if (self.has_end && plan.len() > 7) || (!self.has_end && plan.len() > 4) {
 						if self.has_dedicated_transitions && self.segments[next_segment_id].is_dedicated_transition() {
 							continue;
 						}
-						if self.has_end && !self.segments[next_segment_id].is_end() {
+						if self.has_end && self.has_global_ending && !self.segments[next_segment_id].is_end() {
 							plan.push(self.segments["end"].clone());
+							return plan;
 						}
-						return plan;
+						else if !self.has_end {
+							return plan;
+						}
 					}
 				}
 				None => {
@@ -276,12 +299,14 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 					id: song_id,
 					segments: HashMap::new(),
 					has_end: false,
+					has_global_ending: false,
 					has_multiple_loops: false,
 					has_dedicated_transitions: false,
 					is_archive: false,
 				});
-				if segment.id == "end" {
+				if !song.has_end && segment.id.ends_with("end") {
 					song.has_end = true;
+					song.has_global_ending = segment.id == "end";
 				}
 				if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
 					song.has_multiple_loops = true;
@@ -307,14 +332,16 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 					id: song_id,
 					segments: HashMap::new(),
 					has_end: false,
+					has_global_ending: false,
 					has_multiple_loops: false,
 					has_dedicated_transitions: false,
 					is_archive: true,
 				});
 				for segment_path in archive.file_names() {
 					let segment = parse_segment(&segment_path)?;
-					if segment.id == "end" {
+					if !song.has_end && segment.id.ends_with("end") {
 						song.has_end = true;
+						song.has_global_ending = segment.id == "end";
 					}
 					if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
 						song.has_multiple_loops = true;
@@ -348,7 +375,7 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 					.insert(format!("loop{}", loop_to.as_str()));
 			}
 			else if song.has_multiple_loops && song_segment.is_loop() {
-				if song.has_end {
+				if song.has_end && song.has_global_ending {
 					song_segment.allowed_transitions.insert("end".to_string());
 				}
 
@@ -358,7 +385,7 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 							song_segment.allowed_transitions.insert(seg.id.clone());
 						}
 					}
-					else if seg.id == format!("{}-end", &song_segment.id) {
+					else if !song.has_global_ending && seg.id == format!("{}-end", &song_segment.id) {
 						song_segment.allowed_transitions.insert(seg.id.clone());
 					}
 					else if !song.has_dedicated_transitions
@@ -384,7 +411,7 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 						});
 					}
 					"loop" => {
-						if song.has_end {
+						if song.has_end && song.has_global_ending {
 							song_segment.allowed_transitions.insert("end".to_string());
 						}
 					}
@@ -410,7 +437,7 @@ prop_compose! {
 prop_compose! {
 	/// Generates a valid Song with kinda random dedicated transitions
 	fn song_strategy(max_loop_count: u32, has_end: bool)
-		(id in "[a-z0-9-_]*", loop_count in 1..=max_loop_count, loop_transitions in 0..max_loop_count) -> Song {
+		(id in "[a-z0-9-]*", loop_count in 1..=max_loop_count, loop_transitions in 0..max_loop_count, has_global_ending: bool) -> Song {
 		let mut segment_vec: Vec<SongSegment> = vec![];
 		segment_vec.push(SongSegment {
 			id: "start".to_string(),
@@ -460,7 +487,7 @@ prop_compose! {
 
 		if has_end {
 			segment_vec.push(SongSegment {
-				id: "end".to_string(),
+				id: if !has_global_ending && loop_count > 1 { format!("loop{}-end", loop_count - 1) } else { "end".to_string() },
 				format:"ogg".to_string(),
 				allowed_transitions: set!(),
 			});
@@ -474,6 +501,7 @@ prop_compose! {
 			id,
 			segments,
 			has_end,
+			has_global_ending: has_end && (has_global_ending || loop_count == 1),
 			has_multiple_loops: loop_count > 1,
 			has_dedicated_transitions: loop_transitions > 0,
 			is_archive: false,
@@ -544,6 +572,7 @@ prop_compose! {
 				id,
 				segments,
 				has_end,
+				has_global_ending: has_end,
 				has_multiple_loops: loop_count > 1,
 				has_dedicated_transitions: true,
 				is_archive: false,
@@ -580,6 +609,7 @@ mod test_song_parsing {
 
 				}),
 				has_end: false,
+				has_global_ending: false,
 				has_multiple_loops: false,
 				has_dedicated_transitions: false,
 				is_archive: true,
@@ -629,6 +659,7 @@ mod test_song_parsing {
 					}
 				),
 				has_end: true,
+				has_global_ending: true,
 				has_multiple_loops: false,
 				has_dedicated_transitions: false,
 				is_archive: false,
@@ -661,6 +692,7 @@ mod test_song_parsing {
 					}
 				),
 				has_end: true,
+				has_global_ending: true,
 				has_multiple_loops: true,
 				has_dedicated_transitions: false,
 				is_archive: false,
@@ -698,6 +730,7 @@ mod test_song_parsing {
 					}
 				),
 				has_end: true,
+				has_global_ending: true,
 				has_multiple_loops: true,
 				has_dedicated_transitions: true,
 				is_archive: false,
@@ -725,6 +758,7 @@ mod test_song_parsing {
 					}
 				),
 				has_end: true,
+				has_global_ending: true,
 				has_multiple_loops: false,
 				has_dedicated_transitions: false,
 				is_archive: false,
@@ -769,6 +803,7 @@ mod test_song_parsing {
 					}
 				),
 				has_end: true,
+				has_global_ending: true,
 				has_multiple_loops: false,
 				has_dedicated_transitions: false,
 				is_archive: false,
@@ -798,6 +833,7 @@ mod test_song_parsing {
 					}
 				),
 				has_end: true,
+				has_global_ending: true,
 				has_multiple_loops: true,
 				has_dedicated_transitions: false,
 				is_archive: false,
@@ -832,6 +868,7 @@ mod test_song_parsing {
 					}
 				),
 				has_end: true,
+				has_global_ending: true,
 				has_multiple_loops: true,
 				has_dedicated_transitions: true,
 				is_archive: false,
@@ -912,7 +949,13 @@ mod test_song_parsing {
 			else {
 				prop_assert!(!songs[&song_id].segments["loop"].allowed_transitions.is_empty());
 			}
-			prop_assert!(songs[&song_id].segments["end"].allowed_transitions.is_empty());
+			for segment in songs[&song_id].segments.values() {
+				for transition in &segment.allowed_transitions {
+					if transition.to_string().ends_with("end") {
+						prop_assert!(songs[&song_id].segments[transition].allowed_transitions.is_empty());
+					}
+				}
+			}
 		}
 
 		#[test]
@@ -935,6 +978,77 @@ mod test_song_parsing {
 mod test_song_planning {
 	use super::*;
 
+	// #[test]
+	// / Yeah this test is extremely brittle. This just makes sure we test this specific scenario at least once.
+	// / Property tests will guarentee that something will fail if it should.
+	// fn test_song_must_end_with_loop_specific_end() {
+	// 	let mut rng = rand::thread_rng();
+	// 	let mut songs = map! {
+	// 		"1".to_string() => Song {
+	// 			id: "1".to_string(),
+	// 			segments: map!(
+	// 				"start".to_string() => SongSegment {
+	// 					id: "start".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop0".to_string() => SongSegment {
+	// 					id: "loop0".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop1".to_string() => SongSegment {
+	// 					id: "loop1".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop2".to_string() => SongSegment {
+	// 					id: "loop2".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop3".to_string() => SongSegment {
+	// 					id: "loop3".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop4".to_string() => SongSegment {
+	// 					id: "loop4".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop5".to_string() => SongSegment {
+	// 					id: "loop5".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop6".to_string() => SongSegment {
+	// 					id: "loop6".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop7".to_string() => SongSegment {
+	// 					id: "loop7".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				},
+	// 				"loop1-end".to_string() => SongSegment {
+	// 					id: "loop1-end".to_string(),
+	// 					format:"ogg".to_string(),
+	// 					allowed_transitions: HashSet::new(),
+	// 				}
+	// 			),
+	// 			has_end: true,
+	// 			has_global_ending: false,
+	// 			has_multiple_loops: true,
+	// 			has_dedicated_transitions: false
+	// 		},
+	// 	};
+	// 	initialize_transitions(&mut songs);
+	// 	let plan = songs["1"].make_plan(&mut rng);
+	// 	assert_eq!(&plan.last().unwrap().id, &"loop1-end".to_string())
+	// }
+
 	proptest! {
 		#[test]
 		fn prop_plan_should_end_with_end(song in song_strategy(12, true)) {
@@ -943,7 +1057,7 @@ mod test_song_planning {
 			let mut songs: HashMap<String, Song> = map!(song_id.clone() => song);
 			initialize_transitions(&mut songs);
 			let plan = songs[&song_id].make_plan(&mut rng);
-			prop_assert_eq!(&plan.last().unwrap().id, &"end".to_string())
+			prop_assert!(&plan.last().unwrap().id.ends_with("end"));
 		}
 
 		#[test]
