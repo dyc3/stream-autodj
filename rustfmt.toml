@@ -1,0 +1,31 @@
+unstable_features = true
+
+hard_tabs = true
+tab_spaces = 4
+indent_style = "Block"
+
+max_width = 120
+comment_width = 100
+
+space_before_colon = false
+space_after_colon = true
+
+blank_lines_upper_bound = 1
+blank_lines_lower_bound = 0
+newline_style = "Unix"
+empty_item_single_line = true
+
+brace_style = "SameLineWhere"
+control_brace_style = "ClosingNextLine"
+
+trailing_semicolon = true
+trailing_comma = "Vertical"
+
+merge_imports = true
+merge_derives = true
+
+fn_args_layout = "Compressed"
+
+reorder_impl_items = true
+reorder_imports = true
+reorder_modules = true
