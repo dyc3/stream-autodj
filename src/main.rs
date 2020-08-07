@@ -208,10 +208,8 @@ pub fn get_song_name(file_name: &str) -> String {
 }
 
 pub fn parse_segment(file_name: &str) -> Option<SongSegment> {
-	let mut name_split = file_name.split('_');
-	if name_split.next().unwrap() != "song"{}
-	let _ = name_split.next()?.to_string();
-	let mut song_segment_split = name_split.next()?.split(".");
+	let name_split = file_name.split('_');
+	let mut song_segment_split = name_split.last()?.split(".");
 	let song_segment_id = song_segment_split.next().expect("File missing ID");
 	let song_segment_format = song_segment_split.next().expect("Could not find file format");
 	let segment = SongSegment {
@@ -267,8 +265,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 					is_archive: true,
 				});
 				for segment_path in archive.file_names(){
-					let segment_name = format!("song_archive_{}",segment_path);
-					let segment = parse_segment(&segment_name).unwrap();
+					let segment = parse_segment(&segment_path).unwrap();
 					if segment.id == "end"{
 						song.has_end = true;
 					}
