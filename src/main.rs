@@ -231,8 +231,8 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 		let path = path.as_ref();
 		match detect_file_type(path){
 			FileFormat::SegmentFormat => {
-				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
-				let segment = parse_segment(path.file_name().unwrap().to_str().unwrap()).unwrap();
+				let song_id = get_song_name(path.to_str().unwrap());
+				let segment = parse_segment(path.to_str().unwrap()).unwrap();
 				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
 					segments: HashMap::<String, SongSegment>::new(),
@@ -513,8 +513,23 @@ mod test_song_parsing {
 
 	#[test]
 	fn test_initialize_songs() {
-		let dir = fs::read_dir("./test-data/test_initialize_songs").unwrap();
-		let paths = dir.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
+		let paths = [
+			"songs/song_1_start.ogg",
+			"songs/song_1_loop.ogg",
+			"songs/song_1_end.ogg",
+			"songs/song_2_start.ogg",
+			"songs/song_2_loop0.ogg",
+			"songs/song_2_loop1.ogg",
+			"songs/song_2_end.ogg",
+			"songs/song_3_start.ogg",
+			"songs/song_3_loop0.ogg",
+			"songs/song_3_loop0-to-1.ogg",
+			"songs/song_3_loop1.ogg",
+			"songs/song_3_end.ogg",
+			"songs/song_wav_start.wav",
+			"songs/song_wav_loop.wav",
+			"songs/song_wav_end.wav",
+		];
 		let songs = initialize_songs(&paths);
 		assert_eq!(songs["1"], Song {
 			id: "1".to_string(),
@@ -643,9 +658,12 @@ mod test_song_parsing {
 	#[test]
 	#[should_panic(expected = "Found multiple segments with same ID: Song: format Segment: loop")]
 	fn test_detect_duplicate_segment(){
-		let dir = fs::read_dir("./test-data/test_detect_duplicate_segment").unwrap();
-		let paths = dir.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
-		println!("{}", std::env::current_dir().unwrap().to_str().unwrap());
+		let paths = [
+			"song_format_start.wav",
+			"song_format_end.wav",
+			"song_format_loop.wav",
+			"song_format_loop.ogg"
+		];
 		initialize_songs(&paths);
 	}
 
@@ -771,25 +789,25 @@ mod test_song_parsing {
 		assert_eq!(songs["3"].segments["end"].allowed_transitions, HashSet::new());
 	}
 
-		proptest! {
-	// 	#[test]
-	// 	fn prop_multiloop_song_should_not_contain_references_to_loop(song_id in "[a-z0-9]*", loop_count in 2..10) {
-	// 		let mut paths: Vec<String> = vec![format!("songs/song_{}_start.ogg", song_id)];
-	// 		for i in 0..loop_count {
-	// 			paths.push(format!("songs/song_{}_loop{}.ogg", song_id, i))
-	// 		}
+	proptest! {
+		#[test]
+		fn prop_multiloop_song_should_not_contain_references_to_loop(song_id in "[a-z0-9]*", loop_count in 2..10) {
+			let mut paths: Vec<String> = vec![format!("songs/song_{}_start.ogg", song_id)];
+			for i in 0..loop_count {
+				paths.push(format!("songs/song_{}_loop{}.ogg", song_id, i))
+			}
 
-	// 		let mut songs: HashMap<String, Song> = initialize_songs(&paths);
-	// 		initialize_transitions(&mut songs);
-	// 		for song in songs.values() {
-	// 			for segment in song.segments.values() {
-	// 				prop_assert_ne!(&segment.id, "loop");
-	// 				for transition in &segment.allowed_transitions {
-	// 					prop_assert_ne!(transition, &"loop".to_string());
-	// 				}
-	// 			}
-	// 		}
-	// 	}
+			let mut songs: HashMap<String, Song> = initialize_songs(&paths);
+			initialize_transitions(&mut songs);
+			for song in songs.values() {
+				for segment in song.segments.values() {
+					prop_assert_ne!(&segment.id, "loop");
+					for transition in &segment.allowed_transitions {
+						prop_assert_ne!(transition, &"loop".to_string());
+					}
+				}
+			}
+		}
 
 		#[test]
 		fn prop_should_generate_transitions(song in song_strategy(12, true)) {
