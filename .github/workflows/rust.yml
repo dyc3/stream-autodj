@@ -22,4 +22,4 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Check formatting
-      run: rustup toolchain add nightly-2019-07-06 && rustup component add rustfmt --toolchain nightly-2019-07-06 && cargo +nightly-2019-07-06 fmt -- --check
+      run: rustup toolchain add nightly && rustup component add rustfmt --toolchain nightly && cargo +nightly fmt -- --check
