@@ -2,7 +2,8 @@ mod macros;
 mod repeating_source;
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader,Read};
+use std::io::Cursor;
 use std::collections::{HashSet, HashMap};
 use std::fs;
 use std::path::Path;
@@ -15,6 +16,7 @@ use std::time::Duration;
 use regex::Regex;
 use lazy_static::lazy_static;
 use proptest::{prelude::*, collection::hash_map};
+use zip::ZipArchive;
 use clap::{Arg, App};
 
 lazy_static! {
@@ -38,12 +40,20 @@ pub struct Song {
 	has_end: bool,
 	has_multiple_loops: bool,
 	has_dedicated_transitions: bool,
+	is_archive: bool,
 }
 
 impl Song {
-	fn read_segment(&self, segment: &SongSegment, songs_dir: &str) -> Decoder<BufReader<File>> {
-		let file = File::open(format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format)).unwrap();
-		Decoder::new(BufReader::new(file)).unwrap()
+	fn read_segment(&self, segment: &SongSegment, songs_dir: &str) -> Decoder<BufReader<Cursor<Vec<u8>>>> {
+		let mut data = Vec::new();
+		if self.is_archive{
+			let f = File::open(format!("{}/song_{}.zip", songs_dir, self.id)).unwrap();
+			let mut arch = ZipArchive::new(f).unwrap();
+			arch.by_name(&format!("{}.{}", segment.id, segment.format)).unwrap().read_to_end(&mut data).unwrap();
+		}else{
+			File::open(format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format)).unwrap().read_to_end(&mut data).unwrap();
+		};
+		Decoder::new(BufReader::new(Cursor::new(data))).unwrap()
 	}
 
 	fn make_plan(&self, rng: &mut rand::rngs::ThreadRng) -> Vec<SongSegment> {
@@ -106,37 +116,37 @@ mod test_song_segments {
 		assert!(SongSegment {
 			id: "loop".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_loop());
 
 		assert!(SongSegment {
 			id: "loop0".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_loop());
 
 		assert!(SongSegment {
 			id: "loop1".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_loop());
 
 		assert!(!SongSegment {
 			id: "loop0-to-1".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_loop());
 
 		assert!(!SongSegment {
 			id: "start".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_loop());
 
 		assert!(!SongSegment {
 			id: "end".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_loop());
 	}
 
@@ -145,19 +155,19 @@ mod test_song_segments {
 		assert!(!SongSegment {
 			id: "loop".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_dedicated_transition());
 
 		assert!(!SongSegment {
 			id: "loop0".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_dedicated_transition());
 
 		assert!(SongSegment {
 			id: "loop0-to-1".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_dedicated_transition());
 	}
 
@@ -166,52 +176,116 @@ mod test_song_segments {
 		assert!(SongSegment {
 			id: "end".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_end());
 
 		assert!(SongSegment {
 			id: "loop0-end".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}.is_end());
 	}
+}
+
+pub enum FileFormat {
+	SegmentFormat,
+	SongArchiveFormat,
+	InvalidFormat
+}
+
+pub fn detect_file_type(path: &Path) -> FileFormat{
+	let extension = path.file_name().unwrap().to_str().unwrap().split(".").last().unwrap();
+	match extension{
+		"wav"|"ogg"|"mp3"|"flac" => {FileFormat::SegmentFormat},
+		"zip" => {FileFormat::SongArchiveFormat}
+		_ => {FileFormat::InvalidFormat}
+	}
+}
+
+pub fn get_song_name(file_name: &str) -> String {
+
+	file_name.split("_").collect::<Vec<&str>>()[1].to_string().split(".").next().unwrap().to_owned()
+}
+
+pub fn parse_segment(file_name: &str) -> Option<SongSegment> {
+	let name_split = file_name.split('_');
+	let mut song_segment_split = name_split.last()?.split(".");
+	let song_segment_id = song_segment_split.next().expect("File missing ID");
+	let song_segment_format = song_segment_split.next().expect("Could not find file format");
+	let segment = SongSegment {
+		id: song_segment_id.to_string(),
+		format:song_segment_format.to_string(),
+		allowed_transitions: HashSet::<String>::new(),
+		
+	};
+	Some(segment)
 }
 
 pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 	let mut songs = HashMap::new();
 	for path in paths {
 		let path = path.as_ref();
-		let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
-		let name_split = file_name.split('_').collect::<Vec<_>>();
-		let song_id = name_split[1].to_string();
-		let song_segment_split = name_split[2].split(".").collect::<Vec<_>>();
-		let song_segment_id = song_segment_split[0].to_string();
-		let song_segment_format = song_segment_split[1].to_string();
-		let song = songs.entry(song_id.clone()).or_insert(Song {
-			id: song_id,
-			segments: HashMap::<String, SongSegment>::new(),
-			has_end: false,
-			has_multiple_loops: false,
-			has_dedicated_transitions: false
-		});
-		if !song.has_end && song_segment_id == "end"{
-			song.has_end = true;
+		match detect_file_type(path){
+			FileFormat::SegmentFormat => {
+				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
+				let segment = parse_segment(path.file_name().unwrap().to_str().unwrap()).unwrap();
+				let song = songs.entry(song_id.to_string()).or_insert(Song {
+					id: song_id,
+					segments: HashMap::<String, SongSegment>::new(),
+					has_end: false,
+					has_multiple_loops: false,
+					has_dedicated_transitions: false,
+					is_archive: false,
+				});
+				if segment.id == "end"{
+					song.has_end = true;
+				}
+				if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
+					song.has_multiple_loops = true;
+				}
+				if REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
+					song.has_dedicated_transitions = true;
+				}
+				if song.segments.contains_key(&segment.id.to_string()) {
+					// Panic here, because having multiple files with the same ID is ambiguous
+					panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, segment.id))
+				}
+				song.segments.entry(segment.id.to_string()).or_insert(segment);
+			}
+		    FileFormat::SongArchiveFormat => {
+				let archive = ZipArchive::new(File::open(path).unwrap()).unwrap();
+				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
+				println!("Encountered Archive {}", song_id);
+				let song = songs.entry(song_id.to_string()).or_insert(Song {
+					id: song_id,
+					segments: HashMap::<String, SongSegment>::new(),
+					has_end: false,
+					has_multiple_loops: false,
+					has_dedicated_transitions: false,
+					is_archive: true,
+				});
+				for segment_path in archive.file_names(){
+					let segment = parse_segment(&segment_path).unwrap();
+					if segment.id == "end"{
+						song.has_end = true;
+					}
+					if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
+						song.has_multiple_loops = true;
+					}
+					if REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
+						song.has_dedicated_transitions = true;
+					}
+					if song.segments.contains_key(&segment.id.to_string()) {
+						// Panic here, because having multiple files with the same ID is ambiguous
+						panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, segment.id))
+					}
+					song.segments.entry(segment.id.to_string()).or_insert(segment);
+				}
+			}
+		    FileFormat::InvalidFormat => {
+				println!("Encountered error reading file {}, dropping.", path.to_str().unwrap());
+			}
 		}
-		if !song.has_multiple_loops && song_segment_id != "loop" && REGEX_IS_LOOP.is_match(&song_segment_id) {
-			song.has_multiple_loops = true;
-		}
-		if !song.has_dedicated_transitions && REGEX_IS_DEDICATED_TRANSITION.is_match(&song_segment_id) {
-			song.has_dedicated_transitions = true;
-		}
-		if song.segments.contains_key(&song_segment_id) {
-			// Panic here, because having multiple files with the same ID is ambiguous
-			panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, song_segment_id))
-		}
-		song.segments.entry(song_segment_id.clone()).or_insert(SongSegment {
-			id: song_segment_id,
-			format:song_segment_format,
-			allowed_transitions: HashSet::<String>::new(),
-		});
 	}
 
 	songs
@@ -280,7 +354,7 @@ prop_compose! {
 		SongSegment {
 			id,
 			format: segment_format,
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
 		}
 	}
 }
@@ -293,7 +367,8 @@ prop_compose! {
 		segment_vec.push(SongSegment {
 			id: "start".to_string(),
 			format:"ogg".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			
 		});
 
 		match loop_count {
@@ -301,7 +376,7 @@ prop_compose! {
 				segment_vec.push(SongSegment {
 					id: "loop".to_string(),
 					format:"ogg".to_string(),
-					allowed_transitions: set!()
+					allowed_transitions: set!(),
 				});
 			},
 			_ => {
@@ -309,7 +384,7 @@ prop_compose! {
 					segment_vec.push(SongSegment {
 						id: format!("loop{}", i),
 						format:"ogg".to_string(),
-						allowed_transitions: set!()
+						allowed_transitions: set!(),
 					});
 				}
 			}
@@ -325,7 +400,7 @@ prop_compose! {
 					segment_vec.push(SongSegment {
 						id: format!("loop{}-to-{}", from, to),
 						format:"ogg".to_string(),
-						allowed_transitions: set!()
+						allowed_transitions: set!(),
 					});
 					transition_count += 1;
 					if transition_count >= loop_transitions {
@@ -339,7 +414,7 @@ prop_compose! {
 			segment_vec.push(SongSegment {
 				id: "end".to_string(),
 				format:"ogg".to_string(),
-				allowed_transitions: set!()
+				allowed_transitions: set!(),
 			});
 		}
 
@@ -353,6 +428,7 @@ prop_compose! {
 			has_end,
 			has_multiple_loops: loop_count > 1,
 			has_dedicated_transitions: loop_transitions > 0,
+			is_archive: false,
 		}
 	}
 }
@@ -371,7 +447,7 @@ prop_compose! {
 			segment_vec.push(SongSegment {
 				id: "start".to_string(),
 				format:"ogg".to_string(),
-				allowed_transitions: set!()
+				allowed_transitions: set!(),
 			});
 
 			match loop_count {
@@ -379,7 +455,7 @@ prop_compose! {
 					segment_vec.push(SongSegment {
 						id: "loop".to_string(),
 						format:"ogg".to_string(),
-						allowed_transitions: set!()
+						allowed_transitions: set!(),
 					});
 				},
 				_ => {
@@ -387,7 +463,7 @@ prop_compose! {
 						segment_vec.push(SongSegment {
 							id: format!("loop{}", i),
 							format:"ogg".to_string(),
-							allowed_transitions: set!()
+							allowed_transitions: set!(),
 						});
 					}
 				}
@@ -400,7 +476,7 @@ prop_compose! {
 				segment_vec.push(SongSegment {
 					id: format!("loop{}-to-{}", from, to),
 					format:"ogg".to_string(),
-					allowed_transitions: set!()
+					allowed_transitions: set!(),
 				});
 			}
 
@@ -408,7 +484,7 @@ prop_compose! {
 				segment_vec.push(SongSegment {
 					id: "end".to_string(),
 					format:"ogg".to_string(),
-					allowed_transitions: set!()
+					allowed_transitions: set!(),
 				});
 			}
 
@@ -422,6 +498,7 @@ prop_compose! {
 				has_end,
 				has_multiple_loops: loop_count > 1,
 				has_dedicated_transitions: true,
+				is_archive: false,
 			}
 	}
 }
@@ -429,6 +506,33 @@ prop_compose! {
 #[cfg(test)]
 mod test_song_parsing {
 	use super::*;
+
+	#[test]
+	fn test_song_archive(){
+		let paths = fs::read_dir("test-data/test_song_archive").expect("Unable to list files in songs-dir.");
+		let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
+		let songs= initialize_songs(&path_strings);
+		assert_eq!(songs["archive"],Song{
+			id: "archive".to_string(),
+			segments:map!(
+				"start".to_string() => SongSegment {
+					id: "start".to_string(),
+					format:"wav".to_string(),
+					allowed_transitions: HashSet::new(),
+					
+				},
+				"loop".to_string() => SongSegment {
+					id: "loop".to_string(),
+					format:"wav".to_string(),
+					allowed_transitions: HashSet::new(),
+					
+				}),
+			has_end: false,
+			has_multiple_loops: false,
+			has_dedicated_transitions: false,
+			is_archive: true,
+		})
+	}
 
 	#[test]
 	fn test_initialize_songs() {
@@ -471,7 +575,8 @@ mod test_song_parsing {
 			),
 			has_end: true,
 			has_multiple_loops: false,
-			has_dedicated_transitions: false
+			has_dedicated_transitions: false,
+			is_archive: false,
 		});
 		assert_eq!(songs["2"], Song {
 			id: "2".to_string(),
@@ -499,7 +604,8 @@ mod test_song_parsing {
 			),
 			has_end: true,
 			has_multiple_loops: true,
-			has_dedicated_transitions: false
+			has_dedicated_transitions: false,
+			is_archive: false,
 		});
 		assert_eq!(songs["3"], Song {
 			id: "3".to_string(),
@@ -532,7 +638,8 @@ mod test_song_parsing {
 			),
 			has_end: true,
 			has_multiple_loops: true,
-			has_dedicated_transitions: true
+			has_dedicated_transitions: true,
+			is_archive: false,
 		});
 		assert_eq!(songs["wav"], Song {
 			id: "wav".to_string(),
@@ -555,7 +662,8 @@ mod test_song_parsing {
 			),
 			has_end: true,
 			has_multiple_loops: false,
-			has_dedicated_transitions: false
+			has_dedicated_transitions: false,
+			is_archive: false,
 		});
 	}
 
@@ -595,7 +703,8 @@ mod test_song_parsing {
 				),
 				has_end: true,
 				has_multiple_loops: false,
-				has_dedicated_transitions: false
+				has_dedicated_transitions: false,
+				is_archive: false,
 			},
 			"2".to_string() => Song {
 				id: "2".to_string(),
@@ -623,7 +732,8 @@ mod test_song_parsing {
 				),
 				has_end: true,
 				has_multiple_loops: true,
-				has_dedicated_transitions: false
+				has_dedicated_transitions: false,
+				is_archive: false,
 			},
 			"3".to_string() => Song {
 				id: "3".to_string(),
@@ -656,7 +766,8 @@ mod test_song_parsing {
 				),
 				has_end: true,
 				has_multiple_loops: true,
-				has_dedicated_transitions: true
+				has_dedicated_transitions: true,
+				is_archive: false,
 			}
 		};
 
