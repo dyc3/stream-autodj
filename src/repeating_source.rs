@@ -1,12 +1,9 @@
 use std::time::Duration;
 
-use rodio::source::Buffered;
-use rodio::Sample;
-use rodio::Source;
-
+use rodio::{source::Buffered, Sample, Source};
 
 /// Internal function that builds a `RepeatCount` object.
-pub fn repeat_with_count<I>(input: I,count: i32) -> RepeatCount<I>
+pub fn repeat_with_count<I>(input: I, count: i32) -> RepeatCount<I>
 where
 	I: Source,
 	I::Item: Sample,
@@ -16,7 +13,7 @@ where
 		inner: input.clone(),
 		next: input,
 		count,
-		count_remaining: count
+		count_remaining: count,
 	}
 }
 
@@ -29,7 +26,7 @@ where
 	inner: Buffered<I>,
 	next: Buffered<I>,
 	count: i32,
-	count_remaining: i32
+	count_remaining: i32,
 }
 
 impl<I> Iterator for RepeatCount<I>
@@ -93,8 +90,8 @@ where
 	#[inline]
 	fn total_duration(&self) -> Option<Duration> {
 		match self.inner.total_duration() {
-			Some(dur) => {Some(dur.mul_f32(self.count as f32))}
-			None => {None}
+			Some(dur) => Some(dur.mul_f32(self.count as f32)),
+			None => None,
 		}
 	}
 }
@@ -110,7 +107,7 @@ where
 			inner: self.inner.clone(),
 			next: self.next.clone(),
 			count: self.count,
-			count_remaining: self.count_remaining
+			count_remaining: self.count_remaining,
 		}
 	}
 }

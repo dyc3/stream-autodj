@@ -1,23 +1,21 @@
 mod macros;
 mod repeating_source;
 
-use std::fs::File;
-use std::io::{BufReader,Read};
-use std::io::Cursor;
-use std::collections::{HashSet, HashMap};
-use std::fs;
-use std::path::Path;
-use rodio::Sink;
-use rodio::decoder::Decoder;
-use rodio::{source::Zero, Source};
-use rand::Rng;
-use rand::seq::SliceRandom;
-use std::time::Duration;
-use regex::Regex;
+use clap::{App, Arg};
 use lazy_static::lazy_static;
-use proptest::{prelude::*, collection::hash_map};
+use proptest::{collection::hash_map, prelude::*};
+use rand::{seq::SliceRandom, Rng};
+use regex::Regex;
+use rodio::{decoder::Decoder, source::Zero, Sink, Source};
+use std::{
+	collections::{HashMap, HashSet},
+	fs,
+	fs::File,
+	io::{BufReader, Cursor, Read},
+	path::Path,
+	time::Duration,
+};
 use zip::ZipArchive;
-use clap::{Arg, App};
 
 lazy_static! {
 	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?$").unwrap();
@@ -30,7 +28,7 @@ lazy_static! {
 pub struct SongSegment {
 	id: String,
 	format: String,
-	allowed_transitions: HashSet<String>
+	allowed_transitions: HashSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,12 +44,22 @@ pub struct Song {
 impl Song {
 	fn read_segment(&self, segment: &SongSegment, songs_dir: &str) -> Decoder<BufReader<Cursor<Vec<u8>>>> {
 		let mut data = Vec::new();
-		if self.is_archive{
+		if self.is_archive {
 			let f = File::open(format!("{}/song_{}.zip", songs_dir, self.id)).unwrap();
 			let mut arch = ZipArchive::new(f).unwrap();
-			arch.by_name(&format!("{}.{}", segment.id, segment.format)).unwrap().read_to_end(&mut data).unwrap();
-		}else{
-			File::open(format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format)).unwrap().read_to_end(&mut data).unwrap();
+			arch.by_name(&format!("{}.{}", segment.id, segment.format))
+				.unwrap()
+				.read_to_end(&mut data)
+				.unwrap();
+		}
+		else {
+			File::open(format!(
+				"{}/song_{}_{}.{}",
+				songs_dir, self.id, segment.id, segment.format
+			))
+			.unwrap()
+			.read_to_end(&mut data)
+			.unwrap();
 		};
 		Decoder::new(BufReader::new(Cursor::new(data))).unwrap()
 	}
@@ -66,7 +74,11 @@ impl Song {
 			}
 
 			let current_segment = plan.last().unwrap();
-			let allowed_transitions = current_segment.allowed_transitions.clone().into_iter().collect::<Vec<_>>();
+			let allowed_transitions = current_segment
+				.allowed_transitions
+				.clone()
+				.into_iter()
+				.collect::<Vec<_>>();
 			println!("{:#?}", allowed_transitions);
 			println!("{:#?}", self.segments);
 			match allowed_transitions.choose(rng) {
@@ -84,7 +96,7 @@ impl Song {
 						}
 						return plan;
 					}
-				},
+				}
 				None => {
 					return plan;
 				}
@@ -115,96 +127,111 @@ mod test_song_segments {
 	fn test_is_loop() {
 		assert!(SongSegment {
 			id: "loop".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_loop());
+		}
+		.is_loop());
 
 		assert!(SongSegment {
 			id: "loop0".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_loop());
+		}
+		.is_loop());
 
 		assert!(SongSegment {
 			id: "loop1".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_loop());
+		}
+		.is_loop());
 
 		assert!(!SongSegment {
 			id: "loop0-to-1".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_loop());
+		}
+		.is_loop());
 
 		assert!(!SongSegment {
 			id: "start".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_loop());
+		}
+		.is_loop());
 
 		assert!(!SongSegment {
 			id: "end".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_loop());
+		}
+		.is_loop());
 	}
 
 	#[test]
 	fn test_is_dedicated_transition() {
 		assert!(!SongSegment {
 			id: "loop".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_dedicated_transition());
+		}
+		.is_dedicated_transition());
 
 		assert!(!SongSegment {
 			id: "loop0".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_dedicated_transition());
+		}
+		.is_dedicated_transition());
 
 		assert!(SongSegment {
 			id: "loop0-to-1".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_dedicated_transition());
+		}
+		.is_dedicated_transition());
 	}
 
 	#[test]
 	fn test_is_end() {
 		assert!(SongSegment {
 			id: "end".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_end());
+		}
+		.is_end());
 
 		assert!(SongSegment {
 			id: "loop0-end".to_string(),
-			format:"wav".to_string(),
+			format: "wav".to_string(),
 			allowed_transitions: set!(),
-		}.is_end());
+		}
+		.is_end());
 	}
 }
 
 pub enum FileFormat {
 	SegmentFormat,
 	SongArchiveFormat,
-	InvalidFormat
+	InvalidFormat,
 }
 
-pub fn detect_file_type(path: &Path) -> FileFormat{
+pub fn detect_file_type(path: &Path) -> FileFormat {
 	let extension = path.file_name().unwrap().to_str().unwrap().split(".").last().unwrap();
-	match extension{
-		"wav"|"ogg"|"mp3"|"flac" => {FileFormat::SegmentFormat},
-		"zip" => {FileFormat::SongArchiveFormat}
-		_ => {FileFormat::InvalidFormat}
+	match extension {
+		"wav" | "ogg" | "mp3" | "flac" => FileFormat::SegmentFormat,
+		"zip" => FileFormat::SongArchiveFormat,
+		_ => FileFormat::InvalidFormat,
 	}
 }
 
 pub fn get_song_name(file_name: &str) -> String {
-
-	file_name.split("_").collect::<Vec<&str>>()[1].to_string().split(".").next().unwrap().to_owned()
+	file_name.split("_").collect::<Vec<&str>>()[1]
+		.to_string()
+		.split(".")
+		.next()
+		.unwrap()
+		.to_owned()
 }
 
 pub fn parse_segment(file_name: &str) -> Option<SongSegment> {
@@ -214,9 +241,8 @@ pub fn parse_segment(file_name: &str) -> Option<SongSegment> {
 	let song_segment_format = song_segment_split.next().expect("Could not find file format");
 	let segment = SongSegment {
 		id: song_segment_id.to_string(),
-		format:song_segment_format.to_string(),
+		format: song_segment_format.to_string(),
 		allowed_transitions: HashSet::<String>::new(),
-		
 	};
 	Some(segment)
 }
@@ -225,7 +251,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 	let mut songs = HashMap::new();
 	for path in paths {
 		let path = path.as_ref();
-		match detect_file_type(path){
+		match detect_file_type(path) {
 			FileFormat::SegmentFormat => {
 				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
 				let segment = parse_segment(path.file_name().unwrap().to_str().unwrap()).unwrap();
@@ -237,7 +263,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 					has_dedicated_transitions: false,
 					is_archive: false,
 				});
-				if segment.id == "end"{
+				if segment.id == "end" {
 					song.has_end = true;
 				}
 				if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
@@ -248,11 +274,14 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 				}
 				if song.segments.contains_key(&segment.id.to_string()) {
 					// Panic here, because having multiple files with the same ID is ambiguous
-					panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, segment.id))
+					panic!(format!(
+						"Found multiple segments with same ID: Song: {} Segment: {}",
+						song.id, segment.id
+					))
 				}
 				song.segments.entry(segment.id.to_string()).or_insert(segment);
 			}
-		    FileFormat::SongArchiveFormat => {
+			FileFormat::SongArchiveFormat => {
 				let archive = ZipArchive::new(File::open(path).unwrap()).unwrap();
 				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
 				println!("Encountered Archive {}", song_id);
@@ -264,9 +293,9 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 					has_dedicated_transitions: false,
 					is_archive: true,
 				});
-				for segment_path in archive.file_names(){
+				for segment_path in archive.file_names() {
 					let segment = parse_segment(&segment_path).unwrap();
-					if segment.id == "end"{
+					if segment.id == "end" {
 						song.has_end = true;
 					}
 					if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
@@ -277,12 +306,15 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 					}
 					if song.segments.contains_key(&segment.id.to_string()) {
 						// Panic here, because having multiple files with the same ID is ambiguous
-						panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, segment.id))
+						panic!(format!(
+							"Found multiple segments with same ID: Song: {} Segment: {}",
+							song.id, segment.id
+						))
 					}
 					song.segments.entry(segment.id.to_string()).or_insert(segment);
 				}
 			}
-		    FileFormat::InvalidFormat => {
+			FileFormat::InvalidFormat => {
 				println!("Encountered error reading file {}, dropping.", path.to_str().unwrap());
 			}
 		}
@@ -299,7 +331,9 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 			if song_segment.is_dedicated_transition() {
 				let loop_nums = REGEX_IS_DEDICATED_TRANSITION.captures(&song_segment.id).unwrap();
 				let loop_to = loop_nums.get(2).unwrap();
-				song_segment.allowed_transitions.insert(format!("loop{}", loop_to.as_str()));
+				song_segment
+					.allowed_transitions
+					.insert(format!("loop{}", loop_to.as_str()));
 			}
 			else if song.has_multiple_loops && song_segment.is_loop() {
 				if song.has_end {
@@ -315,7 +349,11 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 					else if seg.id == format!("{}-end", &song_segment.id) {
 						song_segment.allowed_transitions.insert(seg.id.clone());
 					}
-					else if !song.has_dedicated_transitions && song.has_multiple_loops && song_segment.is_loop() && seg.is_loop() {
+					else if !song.has_dedicated_transitions
+						&& song.has_multiple_loops
+						&& song_segment.is_loop()
+						&& seg.is_loop()
+					{
 						if seg.id == song_segment.id {
 							continue;
 						}
@@ -326,20 +364,18 @@ pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
 			else {
 				match song_segment.id.as_str() {
 					"start" => {
-						song_segment.allowed_transitions.insert(
-							if song.has_multiple_loops {
-								"loop0".to_string()
-							}
-							else {
-								"loop".to_string()
-							}
-						);
-					},
+						song_segment.allowed_transitions.insert(if song.has_multiple_loops {
+							"loop0".to_string()
+						}
+						else {
+							"loop".to_string()
+						});
+					}
 					"loop" => {
 						if song.has_end {
 							song_segment.allowed_transitions.insert("end".to_string());
 						}
-					},
+					}
 					_ => {}
 				}
 			}
@@ -368,7 +404,7 @@ prop_compose! {
 			id: "start".to_string(),
 			format:"ogg".to_string(),
 			allowed_transitions: set!(),
-			
+
 		});
 
 		match loop_count {
@@ -508,30 +544,35 @@ mod test_song_parsing {
 	use super::*;
 
 	#[test]
-	fn test_song_archive(){
+	fn test_song_archive() {
 		let paths = fs::read_dir("test-data/test_song_archive").expect("Unable to list files in songs-dir.");
-		let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
-		let songs= initialize_songs(&path_strings);
-		assert_eq!(songs["archive"],Song{
-			id: "archive".to_string(),
-			segments:map!(
+		let path_strings = paths
+			.map(|p| p.unwrap().path().display().to_string())
+			.collect::<Vec<_>>();
+		let songs = initialize_songs(&path_strings);
+		assert_eq!(
+			songs["archive"],
+			Song {
+				id: "archive".to_string(),
+				segments: map!(
 				"start".to_string() => SongSegment {
 					id: "start".to_string(),
 					format:"wav".to_string(),
 					allowed_transitions: HashSet::new(),
-					
+
 				},
 				"loop".to_string() => SongSegment {
 					id: "loop".to_string(),
 					format:"wav".to_string(),
 					allowed_transitions: HashSet::new(),
-					
+
 				}),
-			has_end: false,
-			has_multiple_loops: false,
-			has_dedicated_transitions: false,
-			is_archive: true,
-		})
+				has_end: false,
+				has_multiple_loops: false,
+				has_dedicated_transitions: false,
+				is_archive: true,
+			}
+		)
 	}
 
 	#[test]
@@ -554,127 +595,139 @@ mod test_song_parsing {
 			"songs/song_wav_end.wav",
 		];
 		let songs = initialize_songs(&paths);
-		assert_eq!(songs["1"], Song {
-			id: "1".to_string(),
-			segments: map!(
-				"start".to_string() => SongSegment {
-					id: "start".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"loop".to_string() => SongSegment {
-					id: "loop".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"end".to_string() => SongSegment {
-					id: "end".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				}
-			),
-			has_end: true,
-			has_multiple_loops: false,
-			has_dedicated_transitions: false,
-			is_archive: false,
-		});
-		assert_eq!(songs["2"], Song {
-			id: "2".to_string(),
-			segments: map!(
-				"start".to_string() => SongSegment {
-					id: "start".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"loop0".to_string() => SongSegment {
-					id: "loop0".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"loop1".to_string() => SongSegment {
-					id: "loop1".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"end".to_string() => SongSegment {
-					id: "end".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				}
-			),
-			has_end: true,
-			has_multiple_loops: true,
-			has_dedicated_transitions: false,
-			is_archive: false,
-		});
-		assert_eq!(songs["3"], Song {
-			id: "3".to_string(),
-			segments: map!(
-				"start".to_string() => SongSegment {
-					id: "start".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"loop0".to_string() => SongSegment {
-					id: "loop0".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"loop0-to-1".to_string() => SongSegment {
-					id: "loop0-to-1".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"loop1".to_string() => SongSegment {
-					id: "loop1".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"end".to_string() => SongSegment {
-					id: "end".to_string(),
-					format:"ogg".to_string(),
-					allowed_transitions: HashSet::new(),
-				}
-			),
-			has_end: true,
-			has_multiple_loops: true,
-			has_dedicated_transitions: true,
-			is_archive: false,
-		});
-		assert_eq!(songs["wav"], Song {
-			id: "wav".to_string(),
-			segments: map!(
-				"start".to_string() => SongSegment {
-					id: "start".to_string(),
-					format:"wav".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"loop".to_string() => SongSegment {
-					id: "loop".to_string(),
-					format:"wav".to_string(),
-					allowed_transitions: HashSet::new(),
-				},
-				"end".to_string() => SongSegment {
-					id: "end".to_string(),
-					format:"wav".to_string(),
-					allowed_transitions: HashSet::new(),
-				}
-			),
-			has_end: true,
-			has_multiple_loops: false,
-			has_dedicated_transitions: false,
-			is_archive: false,
-		});
+		assert_eq!(
+			songs["1"],
+			Song {
+				id: "1".to_string(),
+				segments: map!(
+					"start".to_string() => SongSegment {
+						id: "start".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"loop".to_string() => SongSegment {
+						id: "loop".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"end".to_string() => SongSegment {
+						id: "end".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					}
+				),
+				has_end: true,
+				has_multiple_loops: false,
+				has_dedicated_transitions: false,
+				is_archive: false,
+			}
+		);
+		assert_eq!(
+			songs["2"],
+			Song {
+				id: "2".to_string(),
+				segments: map!(
+					"start".to_string() => SongSegment {
+						id: "start".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"loop0".to_string() => SongSegment {
+						id: "loop0".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"loop1".to_string() => SongSegment {
+						id: "loop1".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"end".to_string() => SongSegment {
+						id: "end".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					}
+				),
+				has_end: true,
+				has_multiple_loops: true,
+				has_dedicated_transitions: false,
+				is_archive: false,
+			}
+		);
+		assert_eq!(
+			songs["3"],
+			Song {
+				id: "3".to_string(),
+				segments: map!(
+					"start".to_string() => SongSegment {
+						id: "start".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"loop0".to_string() => SongSegment {
+						id: "loop0".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"loop0-to-1".to_string() => SongSegment {
+						id: "loop0-to-1".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"loop1".to_string() => SongSegment {
+						id: "loop1".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"end".to_string() => SongSegment {
+						id: "end".to_string(),
+						format:"ogg".to_string(),
+						allowed_transitions: HashSet::new(),
+					}
+				),
+				has_end: true,
+				has_multiple_loops: true,
+				has_dedicated_transitions: true,
+				is_archive: false,
+			}
+		);
+		assert_eq!(
+			songs["wav"],
+			Song {
+				id: "wav".to_string(),
+				segments: map!(
+					"start".to_string() => SongSegment {
+						id: "start".to_string(),
+						format:"wav".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"loop".to_string() => SongSegment {
+						id: "loop".to_string(),
+						format:"wav".to_string(),
+						allowed_transitions: HashSet::new(),
+					},
+					"end".to_string() => SongSegment {
+						id: "end".to_string(),
+						format:"wav".to_string(),
+						allowed_transitions: HashSet::new(),
+					}
+				),
+				has_end: true,
+				has_multiple_loops: false,
+				has_dedicated_transitions: false,
+				is_archive: false,
+			}
+		);
 	}
 
 	#[test]
 	#[should_panic(expected = "Found multiple segments with same ID: Song: format Segment: loop")]
-	fn test_detect_duplicate_segment(){
+	fn test_detect_duplicate_segment() {
 		let paths = [
 			"song_format_start.wav",
 			"song_format_end.wav",
 			"song_format_loop.wav",
-			"song_format_loop.ogg"
+			"song_format_loop.ogg",
 		];
 		initialize_songs(&paths);
 	}
@@ -773,19 +826,43 @@ mod test_song_parsing {
 
 		initialize_transitions(&mut songs);
 
-		assert_eq!(songs["1"].segments["start"].allowed_transitions, set!["loop".to_string()]);
+		assert_eq!(
+			songs["1"].segments["start"].allowed_transitions,
+			set!["loop".to_string()]
+		);
 		assert_eq!(songs["1"].segments["loop"].allowed_transitions, set!["end".to_string()]);
 		assert_eq!(songs["1"].segments["end"].allowed_transitions, HashSet::new());
 
-		assert_eq!(songs["2"].segments["start"].allowed_transitions, set!["loop0".to_string()]);
-		assert_eq!(songs["2"].segments["loop0"].allowed_transitions, set!["loop1".to_string(), "end".to_string()]);
-		assert_eq!(songs["2"].segments["loop1"].allowed_transitions, set!["loop0".to_string(), "end".to_string()]);
+		assert_eq!(
+			songs["2"].segments["start"].allowed_transitions,
+			set!["loop0".to_string()]
+		);
+		assert_eq!(
+			songs["2"].segments["loop0"].allowed_transitions,
+			set!["loop1".to_string(), "end".to_string()]
+		);
+		assert_eq!(
+			songs["2"].segments["loop1"].allowed_transitions,
+			set!["loop0".to_string(), "end".to_string()]
+		);
 		assert_eq!(songs["2"].segments["end"].allowed_transitions, HashSet::new());
 
-		assert_eq!(songs["3"].segments["start"].allowed_transitions, set!["loop0".to_string()]);
-		assert_eq!(songs["3"].segments["loop0"].allowed_transitions, set!["loop0-to-1".to_string(), "end".to_string()]);
-		assert_eq!(songs["3"].segments["loop0-to-1"].allowed_transitions, set!["loop1".to_string()]);
-		assert_eq!(songs["3"].segments["loop1"].allowed_transitions, set!["end".to_string()]);
+		assert_eq!(
+			songs["3"].segments["start"].allowed_transitions,
+			set!["loop0".to_string()]
+		);
+		assert_eq!(
+			songs["3"].segments["loop0"].allowed_transitions,
+			set!["loop0-to-1".to_string(), "end".to_string()]
+		);
+		assert_eq!(
+			songs["3"].segments["loop0-to-1"].allowed_transitions,
+			set!["loop1".to_string()]
+		);
+		assert_eq!(
+			songs["3"].segments["loop1"].allowed_transitions,
+			set!["end".to_string()]
+		);
 		assert_eq!(songs["3"].segments["end"].allowed_transitions, HashSet::new());
 	}
 
@@ -934,7 +1011,9 @@ fn main() {
 
 	let songs_dir = args.value_of("songs-dir").unwrap();
 	let paths = fs::read_dir(songs_dir).expect("Unable to list files in songs-dir.");
-	let path_strings = paths.map(|p| p.unwrap().path().display().to_string()).collect::<Vec<_>>();
+	let path_strings = paths
+		.map(|p| p.unwrap().path().display().to_string())
+		.collect::<Vec<_>>();
 
 	let mut songs = initialize_songs(&path_strings);
 	initialize_transitions(&mut songs);
@@ -946,19 +1025,22 @@ fn main() {
 
 	let max_repeats = match args.value_of("max-repeats") {
 		Some(value) => value.parse::<i32>().expect("invalid value for max-repeats"),
-		None => 13
+		None => 13,
 	};
 
 	loop {
 		let current_song_id = match args.value_of("OVERRIDE") {
 			Some(value) => value,
-			None => *songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap()
+			None => *songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap(),
 		};
 		println!("Now playing: {}", current_song_id);
 		let current_song = &songs[current_song_id];
 
 		let plan = current_song.make_plan(&mut rng);
-		println!("plan: {:?}", plan.clone().iter().map(|x| x.id.clone()).collect::<Vec<_>>());
+		println!(
+			"plan: {:?}",
+			plan.clone().iter().map(|x| x.id.clone()).collect::<Vec<_>>()
+		);
 
 		for segment in &plan {
 			let source = current_song.read_segment(segment, songs_dir);
