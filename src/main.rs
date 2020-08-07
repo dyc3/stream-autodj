@@ -2,7 +2,8 @@ mod macros;
 mod repeating_source;
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader,Read};
+use std::io::Cursor;
 use std::collections::{HashSet, HashMap};
 use std::fs;
 use std::path::Path;
@@ -15,6 +16,7 @@ use std::time::Duration;
 use regex::Regex;
 use lazy_static::lazy_static;
 use proptest::{prelude::*, collection::hash_map};
+use zip::ZipArchive;
 use clap::{Arg, App};
 
 lazy_static! {
@@ -27,6 +29,7 @@ lazy_static! {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SongSegment {
 	id: String,
+	is_archived: bool,
 	format: String,
 	allowed_transitions: HashSet<String>
 }
@@ -41,9 +44,16 @@ pub struct Song {
 }
 
 impl Song {
-	fn read_segment(&self, segment: &SongSegment, songs_dir: &str) -> Decoder<BufReader<File>> {
-		let file = File::open(format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format)).unwrap();
-		Decoder::new(BufReader::new(file)).unwrap()
+	fn read_segment(&self, segment: &SongSegment, songs_dir: &str) -> Decoder<BufReader<Cursor<Vec<u8>>>> {
+		let mut data = Vec::new();
+		if segment.is_archived{
+			let f = File::open(format!("{}/song_{}.zip", songs_dir, self.id)).unwrap();
+			let mut arch = ZipArchive::new(f).unwrap();
+			arch.by_name(&format!("{}.{}", segment.id, segment.format)).unwrap().read_to_end(&mut data).unwrap();
+		}else{
+			File::open(format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format)).unwrap().read_to_end(&mut data).unwrap();
+		};
+		Decoder::new(BufReader::new(Cursor::new(data))).unwrap()
 	}
 
 	fn make_plan(&self, rng: &mut rand::rngs::ThreadRng) -> Vec<SongSegment> {
@@ -106,37 +116,43 @@ mod test_song_segments {
 		assert!(SongSegment {
 			id: "loop".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_loop());
 
 		assert!(SongSegment {
 			id: "loop0".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_loop());
 
 		assert!(SongSegment {
 			id: "loop1".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_loop());
 
 		assert!(!SongSegment {
 			id: "loop0-to-1".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_loop());
 
 		assert!(!SongSegment {
 			id: "start".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_loop());
 
 		assert!(!SongSegment {
 			id: "end".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_loop());
 	}
 
@@ -145,19 +161,22 @@ mod test_song_segments {
 		assert!(!SongSegment {
 			id: "loop".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_dedicated_transition());
 
 		assert!(!SongSegment {
 			id: "loop0".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_dedicated_transition());
 
 		assert!(SongSegment {
 			id: "loop0-to-1".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_dedicated_transition());
 	}
 
@@ -166,13 +185,15 @@ mod test_song_segments {
 		assert!(SongSegment {
 			id: "end".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_end());
 
 		assert!(SongSegment {
 			id: "loop0-end".to_string(),
 			format:"wav".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}.is_end());
 	}
 }
@@ -193,7 +214,12 @@ pub fn detect_file_type(path: &Path) -> FileFormat{
 	}
 }
 
-pub fn parse_segment(file_name: &str) -> Option<(String, SongSegment)> {
+pub fn get_song_name(file_name: &str) -> String {
+
+	file_name.split("_").collect::<Vec<&str>>()[1].to_string().split(".").next().unwrap().to_owned()
+}
+
+pub fn parse_segment(file_name: &str) -> Option<SongSegment> {
 	let mut name_split = file_name.split('_');
 	if name_split.next().unwrap() != "song"{}
 	let song_id = name_split.next()?.to_string();
@@ -204,8 +230,9 @@ pub fn parse_segment(file_name: &str) -> Option<(String, SongSegment)> {
 		id: song_segment_id.to_string(),
 		format:song_segment_format.to_string(),
 		allowed_transitions: HashSet::<String>::new(),
+		is_archived: false,
 	};
-	Some((song_id,segment))
+	Some(segment)
 }
 
 pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
@@ -215,7 +242,8 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 		let path = path.as_ref();
 		match detect_file_type(path){
 			FileFormat::SegmentFormat => {
-				let (song_id, segment) = parse_segment(path.to_str().unwrap()).unwrap();
+				let song_id = get_song_name(path.to_str().unwrap());
+				let segment = parse_segment(path.to_str().unwrap()).unwrap();
 				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
 					segments: HashMap::<String, SongSegment>::new(),
@@ -239,7 +267,34 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 				song.segments.entry(segment.id.to_string()).or_insert(segment);
 			}
 		    FileFormat::SongArchiveFormat(archive)=> {
-				println!("Encountered Archive!")
+				let song_id = get_song_name(path.to_str().unwrap());
+				println!("Encountered Archive {}", song_id);
+				let song = songs.entry(song_id.to_string()).or_insert(Song {
+					id: song_id,
+					segments: HashMap::<String, SongSegment>::new(),
+					has_end: false,
+					has_multiple_loops: false,
+					has_dedicated_transitions: false
+				});
+				for segment_path in archive.file_names(){
+					let segment_name = format!("song_archive_{}",segment_path);
+					let mut segment = parse_segment(&segment_name).unwrap();
+					segment.is_archived = true;
+					if segment.id == "end"{
+						song.has_end = true;
+					}
+					if segment.id != "loop" && REGEX_IS_LOOP.is_match(&segment.id) {
+						song.has_multiple_loops = true;
+					}
+					if REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
+						song.has_dedicated_transitions = true;
+					}
+					if song.segments.contains_key(&segment.id.to_string()) {
+						// Panic here, because having multiple files with the same ID is ambiguous
+						panic!(format!("Found multiple segments with same ID: Song: {} Segment: {}", song.id, segment.id))
+					}
+					song.segments.entry(segment.id.to_string()).or_insert(segment);
+				}
 			}
 		    FileFormat::InvalidFormat => {
 				println!("Encountered error reading file {}, dropping.", path.to_str().unwrap());
@@ -313,7 +368,8 @@ prop_compose! {
 		SongSegment {
 			id,
 			format: segment_format,
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		}
 	}
 }
@@ -326,7 +382,8 @@ prop_compose! {
 		segment_vec.push(SongSegment {
 			id: "start".to_string(),
 			format:"ogg".to_string(),
-			allowed_transitions: set!()
+			allowed_transitions: set!(),
+			is_archived: false,
 		});
 
 		match loop_count {
@@ -334,7 +391,8 @@ prop_compose! {
 				segment_vec.push(SongSegment {
 					id: "loop".to_string(),
 					format:"ogg".to_string(),
-					allowed_transitions: set!()
+					allowed_transitions: set!(),
+					is_archived: false,
 				});
 			},
 			_ => {
@@ -342,7 +400,8 @@ prop_compose! {
 					segment_vec.push(SongSegment {
 						id: format!("loop{}", i),
 						format:"ogg".to_string(),
-						allowed_transitions: set!()
+						allowed_transitions: set!(),
+						is_archived: false,
 					});
 				}
 			}
@@ -358,7 +417,8 @@ prop_compose! {
 					segment_vec.push(SongSegment {
 						id: format!("loop{}-to-{}", from, to),
 						format:"ogg".to_string(),
-						allowed_transitions: set!()
+						allowed_transitions: set!(),
+						is_archived: false,
 					});
 					transition_count += 1;
 					if transition_count >= loop_transitions {
@@ -372,7 +432,8 @@ prop_compose! {
 			segment_vec.push(SongSegment {
 				id: "end".to_string(),
 				format:"ogg".to_string(),
-				allowed_transitions: set!()
+				allowed_transitions: set!(),
+				is_archived: false,
 			});
 		}
 
@@ -404,7 +465,8 @@ prop_compose! {
 			segment_vec.push(SongSegment {
 				id: "start".to_string(),
 				format:"ogg".to_string(),
-				allowed_transitions: set!()
+				allowed_transitions: set!(),
+				is_archived: false,
 			});
 
 			match loop_count {
@@ -412,7 +474,8 @@ prop_compose! {
 					segment_vec.push(SongSegment {
 						id: "loop".to_string(),
 						format:"ogg".to_string(),
-						allowed_transitions: set!()
+						allowed_transitions: set!(),
+						is_archived: false,
 					});
 				},
 				_ => {
@@ -420,7 +483,8 @@ prop_compose! {
 						segment_vec.push(SongSegment {
 							id: format!("loop{}", i),
 							format:"ogg".to_string(),
-							allowed_transitions: set!()
+							allowed_transitions: set!(),
+							is_archived: false,
 						});
 					}
 				}
@@ -433,7 +497,8 @@ prop_compose! {
 				segment_vec.push(SongSegment {
 					id: format!("loop{}-to-{}", from, to),
 					format:"ogg".to_string(),
-					allowed_transitions: set!()
+					allowed_transitions: set!(),
+					is_archived: false,
 				});
 			}
 
@@ -441,7 +506,8 @@ prop_compose! {
 				segment_vec.push(SongSegment {
 					id: "end".to_string(),
 					format:"ogg".to_string(),
-					allowed_transitions: set!()
+					allowed_transitions: set!(),
+					is_archived: false,
 				});
 			}
 
@@ -490,16 +556,19 @@ mod test_song_parsing {
 					id: "start".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"loop".to_string() => SongSegment {
 					id: "loop".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"end".to_string() => SongSegment {
 					id: "end".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				}
 			),
 			has_end: true,
@@ -513,21 +582,25 @@ mod test_song_parsing {
 					id: "start".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"loop0".to_string() => SongSegment {
 					id: "loop0".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"loop1".to_string() => SongSegment {
 					id: "loop1".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"end".to_string() => SongSegment {
 					id: "end".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				}
 			),
 			has_end: true,
@@ -541,26 +614,31 @@ mod test_song_parsing {
 					id: "start".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"loop0".to_string() => SongSegment {
 					id: "loop0".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"loop0-to-1".to_string() => SongSegment {
 					id: "loop0-to-1".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"loop1".to_string() => SongSegment {
 					id: "loop1".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"end".to_string() => SongSegment {
 					id: "end".to_string(),
 					format:"ogg".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				}
 			),
 			has_end: true,
@@ -574,16 +652,19 @@ mod test_song_parsing {
 					id: "start".to_string(),
 					format:"wav".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"loop".to_string() => SongSegment {
 					id: "loop".to_string(),
 					format:"wav".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				},
 				"end".to_string() => SongSegment {
 					id: "end".to_string(),
 					format:"wav".to_string(),
 					allowed_transitions: HashSet::new(),
+					is_archived: false,
 				}
 			),
 			has_end: true,
@@ -614,16 +695,19 @@ mod test_song_parsing {
 						id: "start".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"loop".to_string() => SongSegment {
 						id: "loop".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"end".to_string() => SongSegment {
 						id: "end".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					}
 				),
 				has_end: true,
@@ -637,21 +721,25 @@ mod test_song_parsing {
 						id: "start".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"loop0".to_string() => SongSegment {
 						id: "loop0".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"loop1".to_string() => SongSegment {
 						id: "loop1".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"end".to_string() => SongSegment {
 						id: "end".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					}
 				),
 				has_end: true,
@@ -665,26 +753,31 @@ mod test_song_parsing {
 						id: "start".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"loop0".to_string() => SongSegment {
 						id: "loop0".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"loop0-to-1".to_string() => SongSegment {
 						id: "loop0-to-1".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"loop1".to_string() => SongSegment {
 						id: "loop1".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					},
 					"end".to_string() => SongSegment {
 						id: "end".to_string(),
 						format:"ogg".to_string(),
 						allowed_transitions: HashSet::new(),
+						is_archived: false,
 					}
 				),
 				has_end: true,
