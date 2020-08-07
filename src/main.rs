@@ -486,11 +486,22 @@ prop_compose! {
 		}
 
 		if has_end {
-			segment_vec.push(SongSegment {
-				id: if !has_global_ending && loop_count > 1 { format!("loop{}-end", loop_count - 1) } else { "end".to_string() },
-				format:"ogg".to_string(),
-				allowed_transitions: set!(),
-			});
+			if !has_global_ending && loop_count > 1 {
+				for i in 1..=loop_count {
+					segment_vec.push(SongSegment {
+						id: format!("loop{}-end", i),
+						format:"ogg".to_string(),
+						allowed_transitions: set!()
+					});
+				}
+			}
+			else {
+				segment_vec.push(SongSegment {
+					id: "end".to_string(),
+					format:"ogg".to_string(),
+					allowed_transitions: set!()
+				});
+			}
 		}
 
 		let mut segments: HashMap<String, SongSegment> = HashMap::new();
