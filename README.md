@@ -60,6 +60,11 @@ You can add a dedicated end to the song as well:
 ```
 song_SONGNAME_end.ogg
 ```
+Or you can add a loop specific ending:
+```
+song_SONGNAME_loop0-end.ogg
+song_SONGNAME_loop5-end.ogg
+```
 If no dedicated end segment is supplied, the loop will fade out before switching to the next song.
 
 # Contributing
