@@ -79,8 +79,6 @@ impl Song {
 				.clone()
 				.into_iter()
 				.collect::<Vec<_>>();
-			println!("{:#?}", allowed_transitions);
-			println!("{:#?}", self.segments);
 			match allowed_transitions.choose(rng) {
 				Some(next_segment_id) => {
 					plan.push(self.segments[next_segment_id].clone());
