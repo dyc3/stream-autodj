@@ -211,7 +211,6 @@ mod test_song_segments {
 pub enum FileType {
 	SegmentFormat,
 	SongArchiveFormat,
-	// InvalidFormat,
 }
 
 pub fn detect_file_type(file_name: &str) -> Result<FileType, AppError> {
