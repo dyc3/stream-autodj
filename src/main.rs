@@ -71,28 +71,45 @@ impl Song {
 		let mut plan = Vec::<SongSegment>::new();
 		plan.push(self.segments["start"].clone());
 
-		let available_ends = self.segments.clone().into_iter().map(|(_, seg)| seg.id).filter(|seg| seg.ends_with("end")).collect::<Vec<String>>();
+		let available_ends = self
+			.segments
+			.clone()
+			.into_iter()
+			.map(|(_, seg)| seg.id)
+			.filter(|seg| seg.ends_with("end"))
+			.collect::<Vec<String>>();
 
 		loop {
 			assert!(plan.len() <= 100, "plan too long");
 
 			let current_segment = plan.last().unwrap();
 			// It seems pretty shit to call collect and into_iter so many times. A lot less elegant than I would have hoped.
-			let mut transitions = current_segment.allowed_transitions.clone().into_iter().collect::<Vec<String>>().into_iter();
+			let mut transitions = current_segment
+				.allowed_transitions
+				.clone()
+				.into_iter()
+				.collect::<Vec<String>>()
+				.into_iter();
 			if self.has_end && plan.len() > 7 {
-				let mut filtered = transitions.clone().filter(|next| next.ends_with("end")).collect::<Vec<String>>();
+				let mut filtered = transitions
+					.clone()
+					.filter(|next| next.ends_with("end"))
+					.collect::<Vec<String>>();
 				if !filtered.is_empty() {
 					transitions = filtered.into_iter();
 				}
 				else {
-					filtered = transitions.clone().filter(|next| {
-						for end in available_ends.clone() {
-							if end.contains(next) {
-								return true;
+					filtered = transitions
+						.clone()
+						.filter(|next| {
+							for end in available_ends.clone() {
+								if end.contains(next) {
+									return true;
+								}
 							}
-						}
-						false
-					}).collect::<Vec<String>>();
+							false
+						})
+						.collect::<Vec<String>>();
 					if !filtered.is_empty() {
 						transitions = filtered.into_iter();
 					}
