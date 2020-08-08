@@ -1,7 +1,9 @@
+mod errors;
 mod macros;
 mod repeating_source;
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgMatches};
+use errors::DjError;
 use lazy_static::lazy_static;
 use proptest::{collection::hash_map, prelude::*};
 use rand::{seq::SliceRandom, Rng};
@@ -9,6 +11,7 @@ use regex::Regex;
 use rodio::{decoder::Decoder, source::Zero, Sink, Source};
 use std::{
 	collections::{HashMap, HashSet},
+	error::Error,
 	fs,
 	fs::File,
 	io::{BufReader, Cursor, Read},
@@ -42,10 +45,14 @@ pub struct Song {
 }
 
 impl Song {
-	fn read_segment(&self, segment: &SongSegment, songs_dir: &str) -> Decoder<BufReader<Cursor<Vec<u8>>>> {
+	fn read_segment(
+		&self, segment: &SongSegment, songs_dir: &str,
+	) -> Result<Decoder<BufReader<Cursor<Vec<u8>>>>, DjError> {
 		let mut data = Vec::new();
+		let file_name: String;
 		if self.is_archive {
-			let f = File::open(format!("{}/song_{}.zip", songs_dir, self.id)).unwrap();
+			file_name = format!("{}/song_{}.zip", songs_dir, self.id);
+			let f = File::open(&file_name).unwrap();
 			let mut arch = ZipArchive::new(f).unwrap();
 			arch.by_name(&format!("{}.{}", segment.id, segment.format))
 				.unwrap()
@@ -53,25 +60,18 @@ impl Song {
 				.unwrap();
 		}
 		else {
-			File::open(format!(
-				"{}/song_{}_{}.{}",
-				songs_dir, self.id, segment.id, segment.format
-			))
-			.unwrap()
-			.read_to_end(&mut data)
-			.unwrap();
+			file_name = format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format);
+			File::open(&file_name).unwrap().read_to_end(&mut data).unwrap();
 		};
-		Decoder::new(BufReader::new(Cursor::new(data))).unwrap()
+		Decoder::new(BufReader::new(Cursor::new(data))).map_err(|_| DjError::UnrecognizedSongFormat(file_name))
 	}
 
-	fn make_plan(&self, rng: &mut rand::rngs::ThreadRng) -> Vec<SongSegment> {
+	fn make_plan<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec<SongSegment> {
 		let mut plan = Vec::<SongSegment>::new();
 		plan.push(self.segments["start"].clone());
 
 		loop {
-			if plan.len() > 100 {
-				panic!("plan too long");
-			}
+			assert!(plan.len() <= 100, "plan too long");
 
 			let current_segment = plan.last().unwrap();
 			let allowed_transitions = current_segment
@@ -208,54 +208,76 @@ mod test_song_segments {
 	}
 }
 
-pub enum FileFormat {
+pub enum FileType {
 	SegmentFormat,
 	SongArchiveFormat,
-	InvalidFormat,
 }
 
-pub fn detect_file_type(path: &Path) -> FileFormat {
-	let extension = path.file_name().unwrap().to_str().unwrap().split(".").last().unwrap();
+pub fn detect_file_type(file_name: &str) -> Result<FileType, DjError> {
+	let extension = file_name.split(".").last().unwrap();
 	match extension {
-		"wav" | "ogg" | "mp3" | "flac" => FileFormat::SegmentFormat,
-		"zip" => FileFormat::SongArchiveFormat,
-		_ => FileFormat::InvalidFormat,
+		"wav" | "ogg" | "mp3" | "flac" => Ok(FileType::SegmentFormat),
+		"zip" => Ok(FileType::SongArchiveFormat),
+		_ => Err(DjError::UnrecognizedSongFormat(file_name.to_string())),
 	}
 }
 
-pub fn get_song_name(file_name: &str) -> String {
-	file_name.split("_").collect::<Vec<&str>>()[1]
-		.to_string()
+pub fn get_song_name(file_name: &str) -> Result<String, DjError> {
+	Ok(file_name
+		.split("_")
+		.collect::<Vec<_>>()
+		.get(1)
+		.ok_or(DjError::InvalidFileName(file_name.to_string()))?
 		.split(".")
 		.next()
 		.unwrap()
-		.to_owned()
+		.to_string())
 }
 
-pub fn parse_segment(file_name: &str) -> Option<SongSegment> {
+pub fn parse_segment(file_name: &str) -> Result<SongSegment, DjError> {
 	let name_split = file_name.split('_');
-	let mut song_segment_split = name_split.last()?.split(".");
-	let song_segment_id = song_segment_split.next().expect("File missing ID");
-	let song_segment_format = song_segment_split.next().expect("Could not find file format");
+	let mut song_segment_split = name_split.last().unwrap().split('.');
+	let song_segment_id = song_segment_split
+		.next()
+		.ok_or(DjError::InvalidFileName(file_name.to_string()))?;
+	let song_segment_format = song_segment_split
+		.next()
+		.ok_or(DjError::UnrecognizedSongFormat(file_name.to_string()))?;
 	let segment = SongSegment {
 		id: song_segment_id.to_string(),
 		format: song_segment_format.to_string(),
-		allowed_transitions: HashSet::<String>::new(),
+		allowed_transitions: HashSet::new(),
 	};
-	Some(segment)
+
+	Ok(segment)
 }
 
-pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
+pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, Song>, DjError> {
 	let mut songs = HashMap::new();
 	for path in paths {
 		let path = path.as_ref();
-		match detect_file_type(path) {
-			FileFormat::SegmentFormat => {
-				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
-				let segment = parse_segment(path.file_name().unwrap().to_str().unwrap()).unwrap();
+		let file_name = match path.file_name().unwrap().to_str().ok_or(DjError::PathNotValidUnicode) {
+			Ok(val) => val,
+			Err(e) => {
+				println!("Warning: {}. Dropping.", e);
+				continue;
+			}
+		};
+		let file_type = match detect_file_type(file_name) {
+			Ok(val) => val,
+			Err(e) => {
+				println!("Warning: {}. Dropping.", e);
+				continue;
+			}
+		};
+
+		match file_type {
+			FileType::SegmentFormat => {
+				let song_id = get_song_name(file_name)?;
+				let segment = parse_segment(file_name)?;
 				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
-					segments: HashMap::<String, SongSegment>::new(),
+					segments: HashMap::new(),
 					has_end: false,
 					has_multiple_loops: false,
 					has_dedicated_transitions: false,
@@ -270,29 +292,26 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 				if REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 					song.has_dedicated_transitions = true;
 				}
-				if song.segments.contains_key(&segment.id.to_string()) {
-					// Panic here, because having multiple files with the same ID is ambiguous
-					panic!(format!(
-						"Found multiple segments with same ID: Song: {} Segment: {}",
-						song.id, segment.id
-					))
+				if song.segments.contains_key(&segment.id) {
+					// Having multiple files with the same ID is ambiguous.
+					return Err(DjError::MultipleSegmentsWithSameId(song.id.to_string(), segment.id));
 				}
 				song.segments.entry(segment.id.to_string()).or_insert(segment);
 			}
-			FileFormat::SongArchiveFormat => {
+			FileType::SongArchiveFormat => {
 				let archive = ZipArchive::new(File::open(path).unwrap()).unwrap();
-				let song_id = get_song_name(path.file_name().unwrap().to_str().unwrap());
-				println!("Encountered Archive {}", song_id);
+				let song_id = get_song_name(file_name)?;
+				println!("Encountered Archive {}.", song_id);
 				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
-					segments: HashMap::<String, SongSegment>::new(),
+					segments: HashMap::new(),
 					has_end: false,
 					has_multiple_loops: false,
 					has_dedicated_transitions: false,
 					is_archive: true,
 				});
 				for segment_path in archive.file_names() {
-					let segment = parse_segment(&segment_path).unwrap();
+					let segment = parse_segment(&segment_path)?;
 					if segment.id == "end" {
 						song.has_end = true;
 					}
@@ -302,23 +321,17 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> HashMap<String, Song> {
 					if REGEX_IS_DEDICATED_TRANSITION.is_match(&segment.id) {
 						song.has_dedicated_transitions = true;
 					}
-					if song.segments.contains_key(&segment.id.to_string()) {
-						// Panic here, because having multiple files with the same ID is ambiguous
-						panic!(format!(
-							"Found multiple segments with same ID: Song: {} Segment: {}",
-							song.id, segment.id
-						))
+					if song.segments.contains_key(&segment.id) {
+						// Having multiple files with the same ID is ambiguous.
+						return Err(DjError::MultipleSegmentsWithSameId(song.id.to_string(), segment.id));
 					}
 					song.segments.entry(segment.id.to_string()).or_insert(segment);
 				}
 			}
-			FileFormat::InvalidFormat => {
-				println!("Encountered error reading file {}, dropping.", path.to_str().unwrap());
-			}
 		}
 	}
 
-	songs
+	Ok(songs)
 }
 
 pub fn initialize_transitions(songs: &mut HashMap<String, Song>) {
@@ -547,7 +560,7 @@ mod test_song_parsing {
 		let path_strings = paths
 			.map(|p| p.unwrap().path().display().to_string())
 			.collect::<Vec<_>>();
-		let songs = initialize_songs(&path_strings);
+		let songs = initialize_songs(&path_strings).unwrap();
 		assert_eq!(
 			songs["archive"],
 			Song {
@@ -592,7 +605,7 @@ mod test_song_parsing {
 			"songs/song_wav_loop.wav",
 			"songs/song_wav_end.wav",
 		];
-		let songs = initialize_songs(&paths);
+		let songs = initialize_songs(&paths).unwrap();
 		assert_eq!(
 			songs["1"],
 			Song {
@@ -719,7 +732,9 @@ mod test_song_parsing {
 	}
 
 	#[test]
-	#[should_panic(expected = "Found multiple segments with same ID: Song: format Segment: loop")]
+	#[should_panic(
+		expected = "called `Result::unwrap()` on an `Err` value: MultipleSegmentsWithSameId(\"format\", \"loop\")"
+	)]
 	fn test_detect_duplicate_segment() {
 		let paths = [
 			"song_format_start.wav",
@@ -727,7 +742,7 @@ mod test_song_parsing {
 			"song_format_loop.wav",
 			"song_format_loop.ogg",
 		];
-		initialize_songs(&paths);
+		initialize_songs(&paths).unwrap();
 	}
 
 	#[test]
@@ -872,7 +887,7 @@ mod test_song_parsing {
 				paths.push(format!("songs/song_{}_loop{}.ogg", song_id, i))
 			}
 
-			let mut songs: HashMap<String, Song> = initialize_songs(&paths);
+			let mut songs: HashMap<String, Song> = initialize_songs(&paths).unwrap();
 			initialize_transitions(&mut songs);
 			for song in songs.values() {
 				for segment in song.segments.values() {
@@ -984,70 +999,78 @@ mod test_song_planning {
 
 fn main() {
 	let args = App::new("stream-autodj")
-					.version("0.1.0")
-					.author("Carson McManus <@dyc3>")
-					.about("Plays music loops for random durations in random order.")
-					.arg(Arg::with_name("songs-dir")
-						.short("s")
-						.long("songs-dir")
-						.value_name("SONGS_DIR")
-						.help("Sets a custom config file")
-						.default_value("./songs")
-						.takes_value(true))
-					.arg(Arg::with_name("OVERRIDE")
-						.help("Overrides song selection with this song.")
-						.required(false)
-						.index(1))
-					.arg(Arg::with_name("max-repeats")
-						.long("max-repeats")
-						.takes_value(true)
-						.help("Sets the max number of loop repeats"))
-					.arg(Arg::with_name("debug-wait-each-segment")
-						.long("debug-wait-each-segment")
-						.help("Force the program to wait for the sink to empty after each source is added to the sink, and print the name of the segments as they get queued up. Will cause small pauses between song segments as a result."))
-					.get_matches();
+		.version("0.1.0")
+		.author("Carson McManus <@dyc3>")
+		.about("Plays music loops for random durations in random order.")
+		.arg(Arg::with_name("songs-dir")
+			.short("s")
+			.long("songs-dir")
+			.value_name("SONGS_DIR")
+			.help("Sets a custom config file")
+			.default_value("./songs")
+			.takes_value(true))
+		.arg(Arg::with_name("OVERRIDE")
+			.help("Overrides song selection with this song.")
+			.required(false)
+			.index(1))
+		.arg(Arg::with_name("max-repeats")
+			.long("max-repeats")
+			.default_value("13")
+			.takes_value(true)
+			.help("Sets the max number of loop repeats"))
+		.arg(Arg::with_name("debug-wait-each-segment")
+			.long("debug-wait-each-segment")
+			.help("Force the program to wait for the sink to empty after each source is added to the sink, and print the name of the segments as they get queued up. Will cause small pauses between song segments as a result."))
+		.get_matches();
 
+	if let Err(e) = run(args) {
+		eprintln!("Error: {}.", e);
+		std::process::exit(1);
+	}
+}
+
+fn run(args: ArgMatches) -> Result<(), Box<dyn Error>> {
 	let songs_dir = args.value_of("songs-dir").unwrap();
-	let paths = fs::read_dir(songs_dir).expect("Unable to list files in songs-dir.");
+	let paths = fs::read_dir(songs_dir)?;
 	let path_strings = paths
 		.map(|p| p.unwrap().path().display().to_string())
 		.collect::<Vec<_>>();
 
-	let mut songs = initialize_songs(&path_strings);
+	let mut songs = initialize_songs(&path_strings)?;
 	initialize_transitions(&mut songs);
-	println!("Found {} songs", songs.len());
+	println!("Found {} songs.", songs.len());
 
 	let mut rng = rand::thread_rng();
-	let device = rodio::default_output_device().unwrap();
+	let device = rodio::default_output_device().ok_or(DjError::NoOutputDeviceAvailable)?;
 	let sink = Sink::new(&device);
 
-	let max_repeats = match args.value_of("max-repeats") {
-		Some(value) => value.parse::<i32>().expect("invalid value for max-repeats"),
-		None => 13,
-	};
+	let max_repeats: u32 = args
+		.value_of("max-repeats")
+		.unwrap()
+		.parse()
+		.map_err(|_| DjError::MaxRepeatsInvalidValue)?;
 
 	loop {
-		let current_song_id = match args.value_of("OVERRIDE") {
-			Some(value) => value,
-			None => *songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap(),
-		};
-		println!("Now playing: {}", current_song_id);
+		let current_song_id = args
+			.value_of("OVERRIDE")
+			.unwrap_or_else(|| songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap());
+		println!("Now playing: {}.", current_song_id);
 		let current_song = &songs[current_song_id];
 
 		let plan = current_song.make_plan(&mut rng);
 		println!(
-			"plan: {:?}",
+			"Plan: {:?}.",
 			plan.clone().iter().map(|x| x.id.clone()).collect::<Vec<_>>()
 		);
 
 		for segment in &plan {
-			let source = current_song.read_segment(segment, songs_dir);
+			let source = current_song.read_segment(segment, songs_dir)?;
 			if args.is_present("debug-wait-each-segment") {
-				println!("playing segment: {}", segment.id);
+				println!("Playing segment: {}.", segment.id);
 			}
 			if segment.is_loop() && !segment.is_dedicated_transition() {
 				let repeat_counts = rng.gen_range(5, max_repeats);
-				println!("Repeating {} {} times", segment.id, repeat_counts);
+				println!("Repeating {} {} times.", segment.id, repeat_counts);
 				sink.append(repeating_source::repeat_with_count(source, repeat_counts));
 			}
 			else {
@@ -1059,7 +1082,7 @@ fn main() {
 		}
 		if !current_song.has_end {
 			let segment = plan.last().unwrap();
-			let source_end = current_song.read_segment(segment, songs_dir);
+			let source_end = current_song.read_segment(segment, songs_dir)?;
 			let empty_source: Zero<f32> = Zero::new(source_end.channels(), source_end.sample_rate());
 			sink.append(source_end.take_crossfade_with(empty_source, Duration::from_secs(8)));
 		}
