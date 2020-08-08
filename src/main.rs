@@ -1069,7 +1069,7 @@ fn run(args: ArgMatches) -> Result<(), Box<dyn Error>> {
 				println!("Playing segment: {}.", segment.id);
 			}
 			if segment.is_loop() && !segment.is_dedicated_transition() {
-				let repeat_counts = rng.gen_range(5, max_repeats);
+				let repeat_counts: u32 = rng.gen_range(5, max_repeats);
 				println!("Repeating {} {} times.", segment.id, repeat_counts);
 				sink.append(repeating_source::repeat_with_count(source, repeat_counts));
 			}
