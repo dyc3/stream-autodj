@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install nightly toolchain
-      run: rustup toolchain install --allow-downgrade --component rustfmt nightly && rustup default nightly
+      run: rustup toolchain install nightly --allow-downgrade --component rustfmt && rustup default nightly
     - name: Install libasound2-dev
       run: sudo apt-get install -y libasound2-dev
     - name: Build
