@@ -61,3 +61,15 @@ You can add a dedicated end to the song as well:
 song_SONGNAME_end.ogg
 ```
 If no dedicated end segment is supplied, the loop will fade out before switching to the next song.
+
+# Contributing
+
+Contributions are welcome! Simply fork the repo, make your changes, and make a pull request.
+
+## Style
+
+Style is enforced by `rustfmt`. To auto format your code to comply, you must use the nightly version of rustfmt ([See instructions here](https://github.com/rust-lang/rustfmt#on-the-nightly-toolchain)).
+
+```
+cargo +nightly fmt
+```
