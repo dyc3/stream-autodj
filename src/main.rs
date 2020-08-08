@@ -1037,7 +1037,7 @@ fn run(args: ArgMatches) -> Result<(), Box<dyn Error>> {
 
 	let mut songs = initialize_songs(&path_strings)?;
 	initialize_transitions(&mut songs);
-	println!("Found {} songs", songs.len());
+	println!("Found {} songs.", songs.len());
 
 	let mut rng = rand::thread_rng();
 	let device = rodio::default_output_device().ok_or(AppError::NoOutputDeviceAvailable)?;
@@ -1053,19 +1053,19 @@ fn run(args: ArgMatches) -> Result<(), Box<dyn Error>> {
 		let current_song_id = args
 			.value_of("OVERRIDE")
 			.unwrap_or_else(|| songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap());
-		println!("Now playing: {}", current_song_id);
+		println!("Now playing: {}.", current_song_id);
 		let current_song = &songs[current_song_id];
 
 		let plan = current_song.make_plan(&mut rng);
 		println!(
-			"Plan: {:?}",
+			"Plan: {:?}.",
 			plan.clone().iter().map(|x| x.id.clone()).collect::<Vec<_>>()
 		);
 
 		for segment in &plan {
 			let source = current_song.read_segment(segment, songs_dir)?;
 			if args.is_present("debug-wait-each-segment") {
-				println!("Playing segment: {}", segment.id);
+				println!("Playing segment: {}.", segment.id);
 			}
 			if segment.is_loop() && !segment.is_dedicated_transition() {
 				let repeat_counts = rng.gen_range(5, max_repeats);
