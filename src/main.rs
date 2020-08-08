@@ -1,8 +1,9 @@
+mod errors;
 mod macros;
 mod repeating_source;
-mod errors;
 
 use clap::{App, Arg, ArgMatches};
+use errors::AppError;
 use lazy_static::lazy_static;
 use proptest::{collection::hash_map, prelude::*};
 use rand::{seq::SliceRandom, Rng};
@@ -10,15 +11,14 @@ use regex::Regex;
 use rodio::{decoder::Decoder, source::Zero, Sink, Source};
 use std::{
 	collections::{HashMap, HashSet},
+	error::Error,
 	fs,
 	fs::File,
 	io::{BufReader, Cursor, Read},
 	path::Path,
 	time::Duration,
-	error::Error,
 };
 use zip::ZipArchive;
-use errors::AppError;
 
 lazy_static! {
 	static ref REGEX_IS_LOOP: Regex = Regex::new(r"loop(\d+)?$").unwrap();
@@ -45,7 +45,9 @@ pub struct Song {
 }
 
 impl Song {
-	fn read_segment(&self, segment: &SongSegment, songs_dir: &str) -> Result<Decoder<BufReader<Cursor<Vec<u8>>>>, AppError> {
+	fn read_segment(
+		&self, segment: &SongSegment, songs_dir: &str,
+	) -> Result<Decoder<BufReader<Cursor<Vec<u8>>>>, AppError> {
 		let mut data = Vec::new();
 		let file_name: String;
 		if self.is_archive {
@@ -59,10 +61,7 @@ impl Song {
 		}
 		else {
 			file_name = format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format);
-			File::open(&file_name)
-				.unwrap()
-				.read_to_end(&mut data)
-				.unwrap();
+			File::open(&file_name).unwrap().read_to_end(&mut data).unwrap();
 		};
 		Decoder::new(BufReader::new(Cursor::new(data))).map_err(|_| AppError::UnrecognizedSongFormat(file_name))
 	}
@@ -225,7 +224,11 @@ pub fn detect_file_type(file_name: &str) -> Result<FileType, AppError> {
 }
 
 pub fn get_song_name(file_name: &str) -> Result<String, AppError> {
-	Ok(file_name.split("_").collect::<Vec<_>>().get(1).ok_or(AppError::InvalidFileName(file_name.to_string()))?
+	Ok(file_name
+		.split("_")
+		.collect::<Vec<_>>()
+		.get(1)
+		.ok_or(AppError::InvalidFileName(file_name.to_string()))?
 		.split(".")
 		.next()
 		.unwrap()
@@ -235,8 +238,12 @@ pub fn get_song_name(file_name: &str) -> Result<String, AppError> {
 pub fn parse_segment(file_name: &str) -> Result<SongSegment, AppError> {
 	let name_split = file_name.split('_');
 	let mut song_segment_split = name_split.last().unwrap().split('.');
-	let song_segment_id = song_segment_split.next().ok_or(AppError::InvalidFileName(file_name.to_string()))?;
-	let song_segment_format = song_segment_split.next().ok_or(AppError::UnrecognizedSongFormat(file_name.to_string()))?;
+	let song_segment_id = song_segment_split
+		.next()
+		.ok_or(AppError::InvalidFileName(file_name.to_string()))?;
+	let song_segment_format = song_segment_split
+		.next()
+		.ok_or(AppError::UnrecognizedSongFormat(file_name.to_string()))?;
 	let segment = SongSegment {
 		id: song_segment_id.to_string(),
 		format: song_segment_format.to_string(),
@@ -250,13 +257,17 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 	let mut songs = HashMap::new();
 	for path in paths {
 		let path = path.as_ref();
-		let file_name = path.file_name().unwrap().to_str().ok_or(AppError::PathNotValidUnicode)?;
+		let file_name = path
+			.file_name()
+			.unwrap()
+			.to_str()
+			.ok_or(AppError::PathNotValidUnicode)?;
 		let file_type = match detect_file_type(file_name) {
 			Ok(val) => val,
 			Err(e) => {
 				println!("Warning: {}. Dropping.", e);
 				continue;
-			},
+			}
 		};
 
 		match file_type {
@@ -285,7 +296,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 					return Err(AppError::MultipleSegmentsWithSameId(song.id.to_string(), segment.id));
 				}
 				song.segments.entry(segment.id.to_string()).or_insert(segment);
-			},
+			}
 			FileType::SongArchiveFormat => {
 				let archive = ZipArchive::new(File::open(path).unwrap()).unwrap();
 				let song_id = get_song_name(file_name)?;
@@ -315,7 +326,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 					}
 					song.segments.entry(segment.id.to_string()).or_insert(segment);
 				}
-			},
+			}
 		}
 	}
 
@@ -720,7 +731,9 @@ mod test_song_parsing {
 	}
 
 	#[test]
-	#[should_panic(expected = "called `Result::unwrap()` on an `Err` value: MultipleSegmentsWithSameId(\"format\", \"loop\")")]
+	#[should_panic(
+		expected = "called `Result::unwrap()` on an `Err` value: MultipleSegmentsWithSameId(\"format\", \"loop\")"
+	)]
 	fn test_detect_duplicate_segment() {
 		let paths = [
 			"song_format_start.wav",
@@ -1030,10 +1043,16 @@ fn run(args: ArgMatches) -> Result<(), Box<dyn Error>> {
 	let device = rodio::default_output_device().ok_or(AppError::NoOutputDeviceAvailable)?;
 	let sink = Sink::new(&device);
 
-	let max_repeats: u32 = args.value_of("max-repeats").unwrap().parse().map_err(|_| AppError::MaxRepeatsInvalidValue)?;
+	let max_repeats: u32 = args
+		.value_of("max-repeats")
+		.unwrap()
+		.parse()
+		.map_err(|_| AppError::MaxRepeatsInvalidValue)?;
 
 	loop {
-		let current_song_id = args.value_of("OVERRIDE").unwrap_or_else(|| songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap());
+		let current_song_id = args
+			.value_of("OVERRIDE")
+			.unwrap_or_else(|| songs.keys().collect::<Vec<_>>().choose(&mut rng).unwrap());
 		println!("Now playing: {}", current_song_id);
 		let current_song = &songs[current_song_id];
 
