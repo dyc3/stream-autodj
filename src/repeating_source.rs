@@ -3,7 +3,7 @@ use std::time::Duration;
 use rodio::{source::Buffered, Sample, Source};
 
 /// Internal function that builds a `RepeatCount` object.
-pub fn repeat_with_count<I>(input: I, count: i32) -> RepeatCount<I>
+pub fn repeat_with_count<I>(input: I, count: u32) -> RepeatCount<I>
 where
 	I: Source,
 	I::Item: Sample,
@@ -25,8 +25,8 @@ where
 {
 	inner: Buffered<I>,
 	next: Buffered<I>,
-	count: i32,
-	count_remaining: i32,
+	count: u32,
+	count_remaining: u32,
 }
 
 impl<I> Iterator for RepeatCount<I>
@@ -53,7 +53,6 @@ where
 
 	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
-		// Infinite.
 		(0, None)
 	}
 }
