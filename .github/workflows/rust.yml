@@ -16,11 +16,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - run: sudo apt-get install -y libasound2-dev
+    - run: rustup default stable && rustup update
+    - name: Install libasound2-dev
+      run: sudo apt-get install -y libasound2-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
-    # Uncommenct when the rules I want become available on stable
-    # - name: Check formatting
-    #   run: rustup component add rustfmt && cargo fmt -- --check
+    - name: Install nightly toolchain for rustfmt
+      run: rustup toolchain install nightly --allow-downgrade --component rustfmt && rustup default nightly
+    - name: Check formatting
+      run: cargo fmt -- --check
