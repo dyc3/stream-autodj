@@ -3,7 +3,7 @@ mod macros;
 mod repeating_source;
 
 use clap::{App, Arg, ArgMatches};
-use errors::AppError;
+use errors::DjError;
 use lazy_static::lazy_static;
 use proptest::{collection::hash_map, prelude::*};
 use rand::{seq::SliceRandom, Rng};
@@ -47,7 +47,7 @@ pub struct Song {
 impl Song {
 	fn read_segment(
 		&self, segment: &SongSegment, songs_dir: &str,
-	) -> Result<Decoder<BufReader<Cursor<Vec<u8>>>>, AppError> {
+	) -> Result<Decoder<BufReader<Cursor<Vec<u8>>>>, DjError> {
 		let mut data = Vec::new();
 		let file_name: String;
 		if self.is_archive {
@@ -63,7 +63,7 @@ impl Song {
 			file_name = format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format);
 			File::open(&file_name).unwrap().read_to_end(&mut data).unwrap();
 		};
-		Decoder::new(BufReader::new(Cursor::new(data))).map_err(|_| AppError::UnrecognizedSongFormat(file_name))
+		Decoder::new(BufReader::new(Cursor::new(data))).map_err(|_| DjError::UnrecognizedSongFormat(file_name))
 	}
 
 	fn make_plan<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec<SongSegment> {
@@ -213,36 +213,36 @@ pub enum FileType {
 	SongArchiveFormat,
 }
 
-pub fn detect_file_type(file_name: &str) -> Result<FileType, AppError> {
+pub fn detect_file_type(file_name: &str) -> Result<FileType, DjError> {
 	let extension = file_name.split(".").last().unwrap();
 	match extension {
 		"wav" | "ogg" | "mp3" | "flac" => Ok(FileType::SegmentFormat),
 		"zip" => Ok(FileType::SongArchiveFormat),
-		_ => Err(AppError::UnrecognizedSongFormat(file_name.to_string())),
+		_ => Err(DjError::UnrecognizedSongFormat(file_name.to_string())),
 	}
 }
 
-pub fn get_song_name(file_name: &str) -> Result<String, AppError> {
+pub fn get_song_name(file_name: &str) -> Result<String, DjError> {
 	Ok(file_name
 		.split("_")
 		.collect::<Vec<_>>()
 		.get(1)
-		.ok_or(AppError::InvalidFileName(file_name.to_string()))?
+		.ok_or(DjError::InvalidFileName(file_name.to_string()))?
 		.split(".")
 		.next()
 		.unwrap()
 		.to_string())
 }
 
-pub fn parse_segment(file_name: &str) -> Result<SongSegment, AppError> {
+pub fn parse_segment(file_name: &str) -> Result<SongSegment, DjError> {
 	let name_split = file_name.split('_');
 	let mut song_segment_split = name_split.last().unwrap().split('.');
 	let song_segment_id = song_segment_split
 		.next()
-		.ok_or(AppError::InvalidFileName(file_name.to_string()))?;
+		.ok_or(DjError::InvalidFileName(file_name.to_string()))?;
 	let song_segment_format = song_segment_split
 		.next()
-		.ok_or(AppError::UnrecognizedSongFormat(file_name.to_string()))?;
+		.ok_or(DjError::UnrecognizedSongFormat(file_name.to_string()))?;
 	let segment = SongSegment {
 		id: song_segment_id.to_string(),
 		format: song_segment_format.to_string(),
@@ -252,15 +252,17 @@ pub fn parse_segment(file_name: &str) -> Result<SongSegment, AppError> {
 	Ok(segment)
 }
 
-pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, Song>, AppError> {
+pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, Song>, DjError> {
 	let mut songs = HashMap::new();
 	for path in paths {
 		let path = path.as_ref();
-		let file_name = path
-			.file_name()
-			.unwrap()
-			.to_str()
-			.ok_or(AppError::PathNotValidUnicode)?;
+		let file_name = match path.file_name().unwrap().to_str().ok_or(DjError::PathNotValidUnicode) {
+			Ok(val) => val,
+			Err(e) => {
+				println!("Warning: {}. Dropping.", e);
+				continue;
+			}
+		};
 		let file_type = match detect_file_type(file_name) {
 			Ok(val) => val,
 			Err(e) => {
@@ -292,7 +294,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 				}
 				if song.segments.contains_key(&segment.id) {
 					// Having multiple files with the same ID is ambiguous.
-					return Err(AppError::MultipleSegmentsWithSameId(song.id.to_string(), segment.id));
+					return Err(DjError::MultipleSegmentsWithSameId(song.id.to_string(), segment.id));
 				}
 				song.segments.entry(segment.id.to_string()).or_insert(segment);
 			}
@@ -321,7 +323,7 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 					}
 					if song.segments.contains_key(&segment.id) {
 						// Having multiple files with the same ID is ambiguous.
-						return Err(AppError::MultipleSegmentsWithSameId(song.id.to_string(), segment.id));
+						return Err(DjError::MultipleSegmentsWithSameId(song.id.to_string(), segment.id));
 					}
 					song.segments.entry(segment.id.to_string()).or_insert(segment);
 				}
@@ -1039,14 +1041,14 @@ fn run(args: ArgMatches) -> Result<(), Box<dyn Error>> {
 	println!("Found {} songs.", songs.len());
 
 	let mut rng = rand::thread_rng();
-	let device = rodio::default_output_device().ok_or(AppError::NoOutputDeviceAvailable)?;
+	let device = rodio::default_output_device().ok_or(DjError::NoOutputDeviceAvailable)?;
 	let sink = Sink::new(&device);
 
 	let max_repeats: u32 = args
 		.value_of("max-repeats")
 		.unwrap()
 		.parse()
-		.map_err(|_| AppError::MaxRepeatsInvalidValue)?;
+		.map_err(|_| DjError::MaxRepeatsInvalidValue)?;
 
 	loop {
 		let current_song_id = args
