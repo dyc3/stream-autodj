@@ -223,11 +223,9 @@ pub fn detect_file_type(file_name: &str) -> Result<FileType, DjError> {
 }
 
 pub fn get_song_name(file_name: &str) -> Result<String, DjError> {
-	let segments = file_name
-		.split('_')
-		.collect::<Vec<_>>();
-	let name = segments[..(segments.len())-1].join("_");
-	if name == ""{
+	let segments = file_name.split('_').collect::<Vec<_>>();
+	let name = segments[..(segments.len()) - 1].join("_");
+	if name == "" {
 		return Err(DjError::InvalidFileName(file_name.to_string()));
 	}
 	Ok(name)
