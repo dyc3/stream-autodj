@@ -62,18 +62,6 @@ song_SONGNAME_end.ogg
 ```
 If no dedicated end segment is supplied, the loop will fade out before switching to the next song.
 
-# Contributing
-
-Contributions are welcome! Simply fork the repo, make your changes, and make a pull request.
-
-## Style
-
-Style is enforced by `rustfmt`. To auto format your code to comply, you must use the nightly version of rustfmt ([See instructions here](https://github.com/rust-lang/rustfmt#on-the-nightly-toolchain)).
-
-```
-cargo +nightly fmt
-```
-
 # License
 
 Licensed under either of
@@ -85,8 +73,17 @@ Licensed under either of
 
 at your option.
 
-# Contribution
+# Contributing
 
+Contributions are welcome! Simply fork the repo, make your changes, and make a pull request.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
+
+## Style
+
+Style is enforced by `rustfmt`. To auto format your code to comply, you must use the nightly version of rustfmt ([See instructions here](https://github.com/rust-lang/rustfmt#on-the-nightly-toolchain)).
+
+```
+cargo +nightly fmt
+```
