@@ -214,7 +214,7 @@ pub enum FileType {
 }
 
 pub fn detect_file_type(file_name: &str) -> Result<FileType, DjError> {
-	let extension = file_name.split(".").last().unwrap();
+	let extension = file_name.split('.').last().unwrap();
 	match extension {
 		"wav" | "ogg" | "mp3" | "flac" => Ok(FileType::SegmentFormat),
 		"zip" => Ok(FileType::SongArchiveFormat),
@@ -224,11 +224,11 @@ pub fn detect_file_type(file_name: &str) -> Result<FileType, DjError> {
 
 pub fn get_song_name(file_name: &str) -> Result<String, DjError> {
 	Ok(file_name
-		.split("_")
+		.split('_')
 		.collect::<Vec<_>>()
 		.get(1)
-		.ok_or(DjError::InvalidFileName(file_name.to_string()))?
-		.split(".")
+		.ok_or_else(|| DjError::InvalidFileName(file_name.to_string()))?
+		.split('.')
 		.next()
 		.unwrap()
 		.to_string())
@@ -239,10 +239,10 @@ pub fn parse_segment(file_name: &str) -> Result<SongSegment, DjError> {
 	let mut song_segment_split = name_split.last().unwrap().split('.');
 	let song_segment_id = song_segment_split
 		.next()
-		.ok_or(DjError::InvalidFileName(file_name.to_string()))?;
+		.ok_or_else(|| DjError::InvalidFileName(file_name.to_string()))?;
 	let song_segment_format = song_segment_split
 		.next()
-		.ok_or(DjError::UnrecognizedSongFormat(file_name.to_string()))?;
+		.ok_or_else(|| DjError::UnrecognizedSongFormat(file_name.to_string()))?;
 	let segment = SongSegment {
 		id: song_segment_id.to_string(),
 		format: song_segment_format.to_string(),
