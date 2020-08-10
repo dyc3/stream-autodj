@@ -51,7 +51,7 @@ impl Song {
 		let mut data = Vec::new();
 		let file_name: String;
 		if self.is_archive {
-			file_name = format!("{}/song_{}.zip", songs_dir, self.id);
+			file_name = format!("{}/{}.zip", songs_dir, self.id);
 			let f = File::open(&file_name).unwrap();
 			let mut arch = ZipArchive::new(f).unwrap();
 			arch.by_name(&format!("{}.{}", segment.id, segment.format))
@@ -60,7 +60,7 @@ impl Song {
 				.unwrap();
 		}
 		else {
-			file_name = format!("{}/song_{}_{}.{}", songs_dir, self.id, segment.id, segment.format);
+			file_name = format!("{}/{}_{}.{}", songs_dir, self.id, segment.id, segment.format);
 			File::open(&file_name).unwrap().read_to_end(&mut data).unwrap();
 		};
 		Decoder::new(BufReader::new(Cursor::new(data))).map_err(|_| DjError::UnrecognizedSongFormat(file_name))
@@ -223,15 +223,12 @@ pub fn detect_file_type(file_name: &str) -> Result<FileType, DjError> {
 }
 
 pub fn get_song_name(file_name: &str) -> Result<String, DjError> {
-	Ok(file_name
-		.split('_')
-		.collect::<Vec<_>>()
-		.get(1)
-		.ok_or_else(|| DjError::InvalidFileName(file_name.to_string()))?
-		.split('.')
-		.next()
-		.unwrap()
-		.to_string())
+	let segments = file_name.split('_').collect::<Vec<_>>();
+	let name = segments[..(segments.len()) - 1].join("_");
+	if name == "" {
+		return Err(DjError::InvalidFileName(file_name.to_string()));
+	}
+	Ok(name)
 }
 
 pub fn parse_segment(file_name: &str) -> Result<SongSegment, DjError> {
@@ -300,7 +297,11 @@ pub fn initialize_songs<P: AsRef<Path>>(paths: &[P]) -> Result<HashMap<String, S
 			}
 			FileType::SongArchiveFormat => {
 				let archive = ZipArchive::new(File::open(path).unwrap()).unwrap();
-				let song_id = get_song_name(file_name)?;
+				let song_id = file_name
+					.split('.')
+					.next()
+					.ok_or(DjError::InvalidFileName(file_name.to_string()))?
+					.to_string();
 				println!("Encountered Archive {}.", song_id);
 				let song = songs.entry(song_id.to_string()).or_insert(Song {
 					id: song_id,
@@ -562,9 +563,9 @@ mod test_song_parsing {
 			.collect::<Vec<_>>();
 		let songs = initialize_songs(&path_strings).unwrap();
 		assert_eq!(
-			songs["archive"],
+			songs["song_archive"],
 			Song {
-				id: "archive".to_string(),
+				id: "song_archive".to_string(),
 				segments: map!(
 				"start".to_string() => SongSegment {
 					id: "start".to_string(),
@@ -607,9 +608,9 @@ mod test_song_parsing {
 		];
 		let songs = initialize_songs(&paths).unwrap();
 		assert_eq!(
-			songs["1"],
+			songs["song_1"],
 			Song {
-				id: "1".to_string(),
+				id: "song_1".to_string(),
 				segments: map!(
 					"start".to_string() => SongSegment {
 						id: "start".to_string(),
@@ -634,9 +635,9 @@ mod test_song_parsing {
 			}
 		);
 		assert_eq!(
-			songs["2"],
+			songs["song_2"],
 			Song {
-				id: "2".to_string(),
+				id: "song_2".to_string(),
 				segments: map!(
 					"start".to_string() => SongSegment {
 						id: "start".to_string(),
@@ -666,9 +667,9 @@ mod test_song_parsing {
 			}
 		);
 		assert_eq!(
-			songs["3"],
+			songs["song_3"],
 			Song {
-				id: "3".to_string(),
+				id: "song_3".to_string(),
 				segments: map!(
 					"start".to_string() => SongSegment {
 						id: "start".to_string(),
@@ -703,9 +704,9 @@ mod test_song_parsing {
 			}
 		);
 		assert_eq!(
-			songs["wav"],
+			songs["song_wav"],
 			Song {
-				id: "wav".to_string(),
+				id: "song_wav".to_string(),
 				segments: map!(
 					"start".to_string() => SongSegment {
 						id: "start".to_string(),
@@ -733,7 +734,7 @@ mod test_song_parsing {
 
 	#[test]
 	#[should_panic(
-		expected = "called `Result::unwrap()` on an `Err` value: MultipleSegmentsWithSameId(\"format\", \"loop\")"
+		expected = "called `Result::unwrap()` on an `Err` value: MultipleSegmentsWithSameId(\"song_format\", \"loop\")"
 	)]
 	fn test_detect_duplicate_segment() {
 		let paths = [
@@ -881,10 +882,10 @@ mod test_song_parsing {
 
 	proptest! {
 		#[test]
-		fn prop_multiloop_song_should_not_contain_references_to_loop(song_id in "[a-z0-9]*", loop_count in 2..10) {
-			let mut paths: Vec<String> = vec![format!("songs/song_{}_start.ogg", song_id)];
+		fn prop_multiloop_song_should_not_contain_references_to_loop(song_id in "[a-z0-9]+", loop_count in 2..10) {
+			let mut paths: Vec<String> = vec![format!("songs/{}_start.ogg", song_id)];
 			for i in 0..loop_count {
-				paths.push(format!("songs/song_{}_loop{}.ogg", song_id, i))
+				paths.push(format!("songs/{}_loop{}.ogg", song_id, i))
 			}
 
 			let mut songs: HashMap<String, Song> = initialize_songs(&paths).unwrap();
