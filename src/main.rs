@@ -10,7 +10,7 @@ use rand::{seq::SliceRandom, Rng};
 use regex::Regex;
 use rodio::{decoder::Decoder, source::Zero, Sink, Source};
 use std::{
-	collections::{HashMap, HashSet},
+	collections::{HashMap, HashSet, VecDeque},
 	error::Error,
 	fs,
 	fs::File,
@@ -68,78 +68,85 @@ impl Song {
 	}
 
 	fn make_plan<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec<SongSegment> {
-		let mut plan = Vec::<SongSegment>::new();
-		plan.push(self.segments["start"].clone());
+		let mut work_queue = VecDeque::new();
 
-		let available_ends = self
-			.segments
-			.clone()
-			.into_iter()
-			.map(|(_, seg)| seg.id)
-			.filter(|seg| seg.ends_with("end"))
-			.collect::<Vec<String>>();
-
-		loop {
-			assert!(plan.len() <= 100, "plan too long");
-
-			let current_segment = plan.last().unwrap();
-			// It seems pretty shit to call collect and into_iter so many times. A lot less elegant than I would have hoped.
-			let mut transitions = current_segment
+		work_queue.push_back((
+			vec![self.segments["start"].clone()],
+			self.segments[&self.segments["start"]
 				.allowed_transitions
 				.clone()
 				.into_iter()
-				.collect::<Vec<String>>()
-				.into_iter();
-			if self.has_end && plan.len() > 7 {
-				let mut filtered = transitions
+				.collect::<Vec<_>>()[0]]
+				.clone(),
+		));
+
+		while let Some((mut plan, next_seg)) = work_queue.pop_front() {
+			assert!(plan.len() <= 100, "plan too long");
+
+			plan.push(next_seg.clone());
+
+			if next_seg.is_end() {
+				return plan;
+			}
+
+			if plan.len() < 6 || next_seg.is_dedicated_transition() {
+				let mut transitions = next_seg
+					.allowed_transitions
 					.clone()
-					.filter(|next| next.ends_with("end"))
+					.into_iter()
+					.filter(|s| !self.segments[s].is_end())
 					.collect::<Vec<String>>();
-				if !filtered.is_empty() {
-					transitions = filtered.into_iter();
+				if transitions.is_empty() {
+					transitions = next_seg
+						.allowed_transitions
+						.clone()
+						.into_iter()
+						.filter(|s| self.segments[s].is_end())
+						.collect::<Vec<String>>();
+				}
+				if self.has_global_ending {
+					match transitions.choose(rng) {
+						Some(next) => {
+							work_queue.push_back((plan, self.segments[next].clone()));
+						}
+						None => {
+							return plan;
+						}
+					}
 				}
 				else {
-					filtered = transitions
-						.clone()
-						.filter(|next| {
-							for end in available_ends.clone() {
-								if end.contains(next) {
-									return true;
-								}
-							}
-							false
-						})
-						.collect::<Vec<String>>();
-					if !filtered.is_empty() {
-						transitions = filtered.into_iter();
-					}
-				}
-			}
-			let allowed_transitions = transitions.collect::<Vec<String>>();
-			match allowed_transitions.choose(rng) {
-				Some(next_segment_id) => {
-					plan.push(self.segments[next_segment_id].clone());
-					if self.segments[next_segment_id].is_end() {
+					if !self.has_end && transitions.is_empty() {
 						return plan;
 					}
-					else if (self.has_end && plan.len() > 7) || (!self.has_end && plan.len() > 4) {
-						if self.has_dedicated_transitions && self.segments[next_segment_id].is_dedicated_transition() {
-							continue;
-						}
-						if self.has_end && self.has_global_ending && !self.segments[next_segment_id].is_end() {
-							plan.push(self.segments["end"].clone());
-							return plan;
-						}
-						else if !self.has_end {
-							return plan;
-						}
+					transitions.shuffle(rng);
+					for seg in transitions {
+						work_queue.push_back((plan.clone(), self.segments[&seg].clone()));
 					}
 				}
-				None => {
+			}
+			else if self.has_end {
+				let available_ends = next_seg
+					.allowed_transitions
+					.clone()
+					.into_iter()
+					.filter(|s| self.segments[s].is_end())
+					.collect::<Vec<String>>();
+				if let Some(end_seg) = available_ends.get(0) {
+					plan.push(self.segments[end_seg].clone());
 					return plan;
 				}
+				else {
+					for seg_id in next_seg.allowed_transitions {
+						work_queue.push_back((plan.clone(), self.segments[&seg_id].clone()));
+					}
+				}
+			}
+			else {
+				return plan;
 			}
 		}
+
+		panic!("Failed to make plan for song: {}", self.id);
 	}
 }
 
