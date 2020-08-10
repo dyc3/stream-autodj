@@ -410,7 +410,7 @@ prop_compose! {
 prop_compose! {
 	/// Generates a valid Song with kinda random dedicated transitions
 	fn song_strategy(max_loop_count: u32, has_end: bool)
-		(id in "[a-z0-9-]*", loop_count in 1..=max_loop_count, loop_transitions in 0..max_loop_count) -> Song {
+		(id in "[a-z0-9-_]*", loop_count in 1..=max_loop_count, loop_transitions in 0..max_loop_count) -> Song {
 		let mut segment_vec: Vec<SongSegment> = vec![];
 		segment_vec.push(SongSegment {
 			id: "start".to_string(),
@@ -483,7 +483,7 @@ prop_compose! {
 
 prop_compose! {
 	fn song_with_transitions_strategy(loop_count: usize, has_end: bool)
-		(id in "[a-z0-9-]*", transitions in hash_map(0..loop_count, 0..loop_count, 1..loop_count).prop_filter("must not transition into same loop".to_owned(), |m| {
+		(id in "[a-z0-9-_]*", transitions in hash_map(0..loop_count, 0..loop_count, 1..loop_count).prop_filter("must not transition into same loop".to_owned(), |m| {
 			for (from, to) in m {
 				if from == to {
 					return false;
@@ -597,11 +597,11 @@ mod test_song_parsing {
 			"songs/song_2_loop0.ogg",
 			"songs/song_2_loop1.ogg",
 			"songs/song_2_end.ogg",
-			"songs/song_3_start.ogg",
-			"songs/song_3_loop0.ogg",
-			"songs/song_3_loop0-to-1.ogg",
-			"songs/song_3_loop1.ogg",
-			"songs/song_3_end.ogg",
+			"songs/y3_start.ogg",
+			"songs/y3_loop0.ogg",
+			"songs/y3_loop0-to-1.ogg",
+			"songs/y3_loop1.ogg",
+			"songs/y3_end.ogg",
 			"songs/song_wav_start.wav",
 			"songs/song_wav_loop.wav",
 			"songs/song_wav_end.wav",
@@ -667,9 +667,9 @@ mod test_song_parsing {
 			}
 		);
 		assert_eq!(
-			songs["song_3"],
+			songs["y3"],
 			Song {
-				id: "song_3".to_string(),
+				id: "y3".to_string(),
 				segments: map!(
 					"start".to_string() => SongSegment {
 						id: "start".to_string(),
