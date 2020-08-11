@@ -3,8 +3,10 @@ name = "stream_autodj"
 version = "0.1.0"
 authors = ["Carson McManus <carson.mcmanus1@gmail.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "This is the program I use to play background music on my streams"
+readme = "README.md"
+repository = "https://github.com/dyc3/stream-autodj"
+publish = false
 
 [dependencies]
 regex = "1"
