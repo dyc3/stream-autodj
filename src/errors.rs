@@ -26,7 +26,7 @@ impl fmt::Display for DjError {
 			),
 			DjError::InvalidFileName(file_name) => write!(
 				f,
-				"'{}' - invalid file name. Files should be named in this format: song_1_start",
+				"'{}' - invalid file name. Filenames should be named in this format: SONGNAME_SEGMENT (example: song1_start)",
 				file_name
 			),
 			DjError::MultipleSegmentsWithSameId(song_id, segment_id) => write!(
