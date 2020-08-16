@@ -6,6 +6,7 @@ edition = "2018"
 description = "This is the program I use to play background music on my streams"
 readme = "README.md"
 repository = "https://github.com/dyc3/stream-autodj"
+license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
