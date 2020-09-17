@@ -46,6 +46,7 @@ pub struct Song {
 }
 
 impl Song {
+	/// Reads the song segment from disk for playback.
 	fn read_segment(
 		&self, segment: &SongSegment, songs_dir: &str,
 	) -> Result<Decoder<BufReader<Cursor<Vec<u8>>>>, DjError> {
@@ -67,6 +68,7 @@ impl Song {
 		Decoder::new(BufReader::new(Cursor::new(data))).map_err(|_| DjError::UnrecognizedSongFormat(file_name))
 	}
 
+	/// Makes a randomized plan for playing the song.
 	fn make_plan<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec<SongSegment> {
 		let mut work_queue = VecDeque::new();
 
@@ -90,21 +92,23 @@ impl Song {
 			}
 
 			if plan.len() < 6 || next_seg.is_dedicated_transition() {
+				// Randomly pick the next segment.
 				let mut transitions = next_seg
 					.allowed_transitions
 					.clone()
 					.into_iter()
-					.filter(|s| !self.segments[s].is_end())
+					.filter(|s| !self.segments[s].is_end()) // don't end the song too early
 					.collect::<Vec<String>>();
 				if transitions.is_empty() {
 					transitions = next_seg
 						.allowed_transitions
 						.clone()
 						.into_iter()
-						.filter(|s| self.segments[s].is_end())
+						.filter(|s| self.segments[s].is_end()) // but, if there aren't any more valid transitions, we need to end the song
 						.collect::<Vec<String>>();
 				}
 				if self.has_global_ending {
+					// only add one item to the work queue at a time
 					match transitions.choose(rng) {
 						Some(next) => {
 							work_queue.push_back((plan, self.segments[next].clone()));
@@ -118,6 +122,7 @@ impl Song {
 					if !self.has_end && transitions.is_empty() {
 						return plan;
 					}
+					// shuffle is technically not required, but helps to plan more variations in general.
 					transitions.shuffle(rng);
 					for seg in transitions {
 						work_queue.push_back((plan.clone(), self.segments[&seg].clone()));
@@ -125,17 +130,20 @@ impl Song {
 				}
 			}
 			else if self.has_end {
+				// The plan is getting too long, but we need a way to end it on an end segment.
 				let available_ends = next_seg
 					.allowed_transitions
 					.clone()
 					.into_iter()
 					.filter(|s| self.segments[s].is_end())
 					.collect::<Vec<String>>();
+				// early exit if there is an end segment we can transition to
 				if let Some(end_seg) = available_ends.get(0) {
 					plan.push(self.segments[end_seg].clone());
 					return plan;
 				}
 				else {
+					// we need to search all possible plans for an end.
 					for seg_id in next_seg.allowed_transitions {
 						work_queue.push_back((plan.clone(), self.segments[&seg_id].clone()));
 					}
@@ -269,6 +277,11 @@ pub fn detect_file_type(file_name: &str) -> Result<FileType, DjError> {
 	}
 }
 
+/// Extract the song name from the file name.
+///
+/// ```
+/// assert!(get_song_name("ram_ranch_start.ogg"), Ok("ram_ranch"))
+/// ```
 pub fn get_song_name(file_name: &str) -> Result<String, DjError> {
 	let segments = file_name.split('_').collect::<Vec<_>>();
 	let name = segments[..(segments.len()) - 1].join("_");
