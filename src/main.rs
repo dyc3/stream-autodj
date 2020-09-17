@@ -1026,6 +1026,99 @@ mod test_song_parsing {
 mod test_song_planning {
 	use super::*;
 
+	/// Specifically test for a song that is intentionally really complicated. This is
+	/// intended to test performance and benchmark the speed of the planning algorithm.
+	///
+	/// The hypothetical song `big` has 2 groups of loops that can transition to each other
+	/// in a circle, and can only transition in one direction between these groups.
+	/// It also only has dedicated transitions and has only 1 loop specific ending.
+	///
+	/// `big_no_trans` has no dedicated transitions, but only has dedicated ends.
+	///
+	/// TODO: when benchmark tests become stable, switch this test to that. https://doc.rust-lang.org/1.5.0/book/benchmark-tests.html
+	#[test]
+	fn bench_big_song_plan() {
+		let paths = [
+			"songs/big_start.ogg",
+			"songs/big_loop0.ogg",
+			"songs/big_loop0-to-1.ogg",
+			"songs/big_loop1.ogg",
+			"songs/big_loop1-to-0.ogg",
+			"songs/big_loop1-to-2.ogg",
+			"songs/big_loop1-to-3.ogg",
+			"songs/big_loop1-to-5.ogg",
+			"songs/big_loop2.ogg",
+			"songs/big_loop2-to-3.ogg",
+			"songs/big_loop3.ogg",
+			"songs/big_loop3-to-0.ogg",
+			"songs/big_loop3-to-1.ogg",
+			"songs/big_loop3-to-4.ogg",
+			"songs/big_loop4.ogg",
+			"songs/big_loop4-to-5.ogg",
+			"songs/big_loop5.ogg",
+			"songs/big_loop5-to-0.ogg",
+			"songs/big_loop5-to-6.ogg",
+
+			"songs/big_loop6.ogg",
+			"songs/big_loop6-to-7.ogg",
+			"songs/big_loop6-to-9.ogg",
+			"songs/big_loop7.ogg",
+			"songs/big_loop7-to-8.ogg",
+			"songs/big_loop8.ogg",
+			"songs/big_loop8-to-9.ogg",
+			"songs/big_loop9.ogg",
+			"songs/big_loop9-to-10.ogg",
+			"songs/big_loop10.ogg",
+			"songs/big_loop10-to-6.ogg",
+			"songs/big_loop10-to-7.ogg",
+			"songs/big_loop10-end.ogg",
+
+			"songs/big_no_trans_start.ogg",
+			"songs/big_no_trans_loop0.ogg",
+			"songs/big_no_trans_loop1.ogg",
+			"songs/big_no_trans_loop2.ogg",
+			"songs/big_no_trans_loop3.ogg",
+			"songs/big_no_trans_loop4.ogg",
+			"songs/big_no_trans_loop5.ogg",
+			"songs/big_no_trans_loop6.ogg",
+			"songs/big_no_trans_loop7.ogg",
+			"songs/big_no_trans_loop8.ogg",
+			"songs/big_no_trans_loop9.ogg",
+			"songs/big_no_trans_loop10.ogg",
+			"songs/big_no_trans_loop11.ogg",
+			"songs/big_no_trans_loop12.ogg",
+			"songs/big_no_trans_loop13.ogg",
+			"songs/big_no_trans_loop14.ogg",
+			"songs/big_no_trans_loop15.ogg",
+			"songs/big_no_trans_loop16.ogg",
+			"songs/big_no_trans_loop17.ogg",
+			"songs/big_no_trans_loop18.ogg",
+			"songs/big_no_trans_loop19.ogg",
+			"songs/big_no_trans_loop20.ogg",
+			"songs/big_no_trans_loop20-end.ogg",
+		];
+		let mut rng = rand::thread_rng();
+		let mut songs = initialize_songs(&paths).unwrap();
+		initialize_transitions(&mut songs);
+		let big_ass_song = songs["big"].clone();
+		assert_eq!(big_ass_song.has_end, true);
+		assert_eq!(big_ass_song.has_global_ending, false);
+		assert_eq!(big_ass_song.has_multiple_loops, true);
+		assert_eq!(big_ass_song.has_dedicated_transitions, true);
+		let plan = big_ass_song.make_plan(&mut rng);
+		assert!(plan.len() >= 3);
+		assert_eq!(&plan.first().unwrap().id, &"start".to_string());
+		assert!(&plan.last().unwrap().id.ends_with("end"));
+		println!("{:?}", plan.iter().map(|x| x.id.clone()).collect::<Vec<_>>());
+
+		let big_ass_song = songs["big_no_trans"].clone();
+		let plan = big_ass_song.make_plan(&mut rng);
+		assert!(plan.len() >= 3);
+		assert_eq!(&plan.first().unwrap().id, &"start".to_string());
+		assert!(&plan.last().unwrap().id.ends_with("end"));
+		println!("{:?}", plan.iter().map(|x| x.id.clone()).collect::<Vec<_>>());
+	}
+
 	proptest! {
 		#[test]
 		fn prop_plan_should_end_with_end(song in song_strategy(12, true)) {
